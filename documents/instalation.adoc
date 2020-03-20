@@ -1,0 +1,104 @@
+:internal:
+= Mac Install
+:toc: left
+:author: Jonny
+:revnumber!: 1.0.0
+:revdate: Tuesday, 11 February, 2020
+:doctype:   article
+:encoding:  utf-8
+:lang:      en
+:toc:       left
+:toclevels: 5
+:toc-title: Table of Content
+:sectnums:
+:last-update-label:
+:nofooter!:
+:media: print
+:icons: font
+:pagenums:
+:imagesdir: images/
+:numbered:
+:toc: left
+:xrefstyle: full
+
+
+== Installing Homebrew
+To install these tools on macOS, I recommend that you use Homebrew, https://brew.sh/. If you don't have it installed, you can install it with the following command:
+
+[source,linux]
+----
+/usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+----
+
+Installing the command-line tools for Xcode installs Homebrew, so it might take a while if you don't have it installed already.
+Verify the installation of Homebrew with the following commands:
+
+[source,linux]
+----
+brew --version
+Expect a response such as the following:
+
+Homebrew 1.7.7
+----
+
+Using Homebrew to install Java, curl, jq, and the Spring Boot CLI
+On a macOS, curl is already preinstalled and git was installed as part of the installation of Homebrew. The remaining tools can be installed on a macOS using Homebrew with the following command:
+
+[source,linux]
+----
+brew tap pivotal/tap && \
+brew cask install java && \
+brew install jq && \
+brew install springboot
+
+The installation of these tools can be verified by the following commands:
+
+git --version
+java -version
+curl --version
+jq --version
+spring --version
+----
+
+These commands will return something like the following (some extra irrelevant output was removed):
+
+== Gradle Version
+gradle-4.10 --> spring.boot 2.2.5.RELEASE
+
+You can copy from this gradle folder.
+
+== Generate skeleton Project
+
+1. copy the gradle folder, gradlew, gradlew.bat, create-projects.bash
+
+2. create folder microservices
+   run the script inside the create-projects.bash
+
+3. create settings.gradle in root folder to include all modules
+
+[source,linux]
+----
+cat <<EOF > settings.gradle
+include ':microservices:product-service'
+include ':microservices:review-service'
+include ':microservices:recommendation-service'
+include ':microservices:product-composite-service'
+EOF
+----
+
+4. We no longer need the generated Gradle executable files in each project, so we can remove them with the following commands:
+
+[source,linux]
+----
+find microservices -depth -name "gradle" -exec rm -rfv "{}" \;
+find microservices -depth -name "gradlew*" -exec rm -fv "{}" \;
+----
+
+5. Now, we can build all the microservices with one command:
+
+[spurce,linux]
+----
+./gradlew build
+----
+
+6. Now we can import from intelij by using open project

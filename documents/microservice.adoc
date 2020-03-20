@@ -1,0 +1,777 @@
+:internal:
+= Micro Service
+:toc: left
+:author: Jonny
+:revnumber!: 1.0.0
+:revdate: Tuesday, 11 February, 2020
+:doctype:   article
+:encoding:  utf-8
+:lang:      en
+:toc:       left
+:toclevels: 5
+:toc-title: Table of Content
+:sectnums:
+:last-update-label:
+:nofooter!:
+:media: print
+:icons: font
+:pagenums:
+:imagesdir: images/
+:numbered:
+:toc: left
+:xrefstyle: full
+
+== What do we build
+
+=== Product service
+The product service manages product information and describes each product with the following attributes:
+
+- Product ID
+- Name
+- Weight
+
+=== Review service
+The review service manages product reviews and stores the following information about each review:
+
+- Product ID
+- Review ID
+- Author
+- Subject
+- Content
+
+=== Recommendation service
+The recommendation service manages product recommendations and stores the following information about each recommendation:
+
+- Product ID
+- Recommendation ID
+- Author
+- Rate
+- Content
+
+=== Product composite service
+The product composite service aggregates information from the three core services and presents information about a product as follows:
+
+Product information, as described in the product service
+A list of product reviews for the specified product, as described in the review service
+A list of product recommendations for the specified product, as described in the recommendation service
+
+== Start ALL
+
+[source,linux]
+----
+java -jar microservices/product-composite-service/build/libs/*.jar &
+java -jar microservices/product-service/build/libs/*.jar &
+java -jar microservices/recommendation-service/build/libs/*.jar &
+java -jar microservices/review-service/build/libs/*.jar &
+
+To get the JSON response pretty-printed, you can use the jq tool
+
+curl http://localhost:7000/product-composite/1 -s | jq .
+----
+
+== STOP ALL
+[source,linux]
+----ß
+kill $(jobs -p)
+----
+
+== Find application used specifing port
+
+[source,linux]
+----
+lsof -i:7002
+----
+
+== Curl with prety
+[source,linux]
+----
+curl http://localhost:7000/product-composite/1 -s | jq .
+----
+
+== Preventing slow lookup of the localhost hostname
+
+With effect from macOS Sierra, looking up the hostname that's used by the localhost in a Java program on a macOS can take a very long time, that is, 5 seconds, making tests very slow. The problem seems to be fixed when using macOS Mojave, but if you are using an older version of macOS, this can easily be fixed.
+
+First, you need to verify whether the problem affects you by downloading a small tool from GitHub and running it:
+
+[source,terminal]
+----
+git clone https://github.com/thoeni/inetTester.git
+java -jar inetTester/bin/inetTester.jar
+
+
+jonny@jonnys-MacBook-Air from-git $ java -jar inetTester/bin/inetTester.jar
+Calling the hostname resolution method...
+Method called, hostname jonnys-MacBook-Air.local, elapsed time: 13 (ms)
+
+If you have a response time of 5 seconds, then you have a problem!
+
+The solution is to edit the /etc/hosts file and add your local hostname, which is Magnuss-Mac.local in the preceding example, after localhost; for example:
+
+127.0.0.1 localhost Magnuss-Mac.local
+::1       localhost Magnuss-Mac.local
+----
+
+== Adding semi-automated tests of a microservice landscape
+
+Being able to automatically test each microservice in isolation is, of course, very useful, but insufficient!
+
+We need a way to automatically test all of our microservices to ensure that they deliver what we expect!
+
+For this reason, I have written a simple bash script that can perform calls to a RESTful API using curl and verify its return code and parts of its JSON response using jq. The script contains two helper functions, assertCurl() and assertEqual(), to make the test code compact and easier to read.
+
+For example, making a normal request and expecting 200 as the status code, as well as asserting that we get back a JSON response that returns the requested productId along with three recommendations and three reviews, looks like the following:
+
+[source,linux]
+----
+# Verify that a normal request works, expect three recommendations and three reviews
+assertCurl 200 "curl http://$HOST:${PORT}/product-composite/1 -s"
+assertEqual 1 $(echo $RESPONSE | jq .productId)
+assertEqual 3 $(echo $RESPONSE | jq ".recommendations | length")
+assertEqual 3 $(echo $RESPONSE | jq ".reviews | length")
+
+Verifying that we get 404 (Not Found) back as an HTTP response code (when we try to look up a product that doesn't exist) looks as follows:
+
+# Verify that a 404 (Not Found) error is returned for a non-existing productId (13)
+assertCurl 404 "curl http://$HOST:${PORT}/product-composite/13 -s"
+----
+
+== Semi Automatic Test Script
+
+[source,linux]
+----
+#!/usr/bin/env bash
+#
+# Sample usage:
+#
+#   HOST=localhost PORT=7000 ./test-em-all.bash
+#
+: ${HOST=localhost}
+: ${PORT=7000}
+
+function assertCurl() {
+
+  local expectedHttpCode=$1
+  local curlCmd="$2 -w \"%{http_code}\""
+  local result=$(eval $curlCmd)
+  local httpCode="${result:(-3)}"
+  RESPONSE='' && (( ${#result} > 3 )) && RESPONSE="${result%???}"
+
+  if [ "$httpCode" = "$expectedHttpCode" ]
+  then
+    if [ "$httpCode" = "200" ]
+    then
+      echo "Test OK (HTTP Code: $httpCode)"
+    else
+      echo "Test OK (HTTP Code: $httpCode, $RESPONSE)"
+    fi
+  else
+      echo  "Test FAILED, EXPECTED HTTP Code: $expectedHttpCode, GOT: $httpCode, WILL ABORT!"
+      echo  "- Failing command: $curlCmd"
+      echo  "- Response Body: $RESPONSE"
+      exit 1
+  fi
+}
+
+function assertEqual() {
+
+  local expected=$1
+  local actual=$2
+
+  if [ "$actual" = "$expected" ]
+  then
+    echo "Test OK (actual value: $actual)"
+  else
+    echo "Test FAILED, EXPECTED VALUE: $expected, ACTUAL VALUE: $actual, WILL ABORT"
+    exit 1
+  fi
+}
+set -e
+
+echo "HOST=${HOST}"
+echo "PORT=${PORT}"
+
+
+# Verify that a normal request works, expect three recommendations and three reviews
+assertCurl 200 "curl http://$HOST:$PORT/product-composite/1 -s"
+assertEqual 1 $(echo $RESPONSE | jq .productId)
+assertEqual 3 $(echo $RESPONSE | jq ".recommendations | length")
+assertEqual 3 $(echo $RESPONSE | jq ".reviews | length")
+
+# Verify that a 404 (Not Found) error is returned for a non existing productId (13)
+assertCurl 404 "curl http://$HOST:$PORT/product-composite/13 -s"
+
+# Verify that no recommendations are returned for productId 113
+assertCurl 200 "curl http://$HOST:$PORT/product-composite/113 -s"
+assertEqual 113 $(echo $RESPONSE | jq .productId)
+assertEqual 0 $(echo $RESPONSE | jq ".recommendations | length")
+assertEqual 3 $(echo $RESPONSE | jq ".reviews | length")
+
+# Verify that no reviews are returned for productId 213
+assertCurl 200 "curl http://$HOST:$PORT/product-composite/213 -s"
+assertEqual 213 $(echo $RESPONSE | jq .productId)
+assertEqual 3 $(echo $RESPONSE | jq ".recommendations | length")
+assertEqual 0 $(echo $RESPONSE | jq ".reviews | length")
+
+# Verify that a 422 (Unprocessable Entity) error is returned for a productId that is out of range (-1)
+assertCurl 422 "curl http://$HOST:$PORT/product-composite/-1 -s"
+assertEqual "\"Invalid productId: -1\"" "$(echo $RESPONSE | jq .message)"
+
+# Verify that a 400 (Bad Request) error error is returned for a productId that is not a number, i.e. invalid format
+assertCurl 400 "curl http://$HOST:$PORT/product-composite/invalidProductId -s"
+assertEqual "\"Type mismatch.\"" "$(echo $RESPONSE | jq .message)"
+
+
+----
+
+== Knowing how many core
+
+[source,linux]
+----
+echo 'Runtime.getRuntime().availableProcessors()' | jshell -q
+----
+
+== Knowing how many heap
+In terms of the amount of available memory, let's ask the JVM for the maximum size that it thinks it can allocate for the heap. We can achieve this by asking the JVM for extra runtime information using the -XX:+PrintFlagsFinal Java option and then using the grep command to filter out the MaxHeapSize parameter, like so:
+
+[source,terminal]
+----
+java -XX:+PrintFlagsFinal -version | grep MaxHeapSize
+
+On my machine, I get the following response:
+
+
+
+8589934592 bytes happens to be exactly 8 GB, that is, 8 * 1,024^3. Given that we don't specify any max heap size for the JVM using the -Xmx parameter, the JVM will set the max value to one quarter of the available memory. Since my laptop has 32 GB of memory and 32/4=8, this is also as expected!
+
+Let's wrap this up by verifying that we can lower the maximum heap size with the -Xmx parameter to, for example, 200 MB:
+
+java -Xmx200m -XX:+PrintFlagsFinal -version | grep MaxHeapSize
+
+The JVM will respond with 209,715,200 bytes, that is, 200 * 1,024^3 bytes = 200 MB, as expected!
+
+Now that we have seen how the Java commands work without Docker, let's try this with Docker!s
+----
+
+
+== CPU
+Let's start by applying no constraints, that is, the same test that we did without Docker:
+
+echo 'Runtime.getRuntime().availableProcessors()' | docker run --rm -i openjdk:12.0.2 jshell -q
+This command will send the Runtime.getRuntime().availableProcessors() string to the Docker container that will process the string using jshell.
+It will respond with the same result, that is, $1 ==> 12 in my case. Let's move on and restrict the Docker container to only be allowed to use three CPU cores using the --cpus 3 Docker option and ask the JVM about how many available processors it sees:
+
+[source,terminal]
+----
+echo 'Runtime.getRuntime().availableProcessors()' | docker run --rm -i --cpus 3 openjdk:12.0.2 jshell -q
+
+The JVM now responds with $1 ==> 3, that is, Java SE 12 honors the settings in the container and will, therefore, be able to configure CPU-related resources such as thread pools correctly!
+----
+
+Let's also try to specify a relative share of the available CPUs instead of an exact number of CPUs. 1,024 shares correspond to one core by default, so if we want to limit the container to two cores, we set the --cpu-shares Docker option to 2,048, like so:
+
+[source,terminal]
+----
+echo 'Runtime.getRuntime().availableProcessors()' | docker run --rm -i --cpu-shares 2048 openjdk:12.0.2 jshell -q
+
+The JVM will respond with $1 ==> 2, that is, Java SE 12 honors the relative share option as well!
+----
+
+While the --cpus option is a hard constraint, the --cpu-shares option only applies when the Docker host is under high load. This means that a container can consume more CPU than what the share option indicates whether CPU capacity is available.
+Let's try out limiting the amount of memory next.
+
+
+== Memory
+With no memory constraints, Docker will allocate one-fourth of the memory to the container:
+
+[source,terminal]
+----
+docker run -it --rm openjdk:12.0.2 java -XX:+PrintFlagsFinal -version | grep MaxHeapSize
+
+It will respond with 4,202,692,608 bytes, which equals 4 GB, that is, 8 * 1024^3. Since my Docker host has 16 GB of memory, this is correct, that is, 16/4 = 4.
+----
+
+However, if we constrain the Docker container to only use up to 1 GB of memory using the -m=1024M Docker option, we will see a lower memory allocation:
+[source,terminal]
+----
+docker run -it --rm -m=1024M openjdk:12.0.2 java -XX:+PrintFlagsFinal -version | grep MaxHeapSize
+
+The JVM will respond with 268,435,456 bytes, which equals 256 MB, that is, 2 * 1024^2 bytes. 256 MB is one-fourth of 1 GB, so again, this is as expected.
+----
+
+
+We can, as usual, set the max heap size ourselves. For example, if we want to allow the heap to use 800 MB of the total 1 GB we have, we can specify that using the -Xmx800m Java option:
+
+docker run -it --rm -m=1024M openjdk:12.0.2 java -Xmx800m -XX:+PrintFlagsFinal -version | grep MaxHeapSize
+The JVM will respond with 838,860,800 bytes = 800 * 1024^2 bytes = 800 MB, as expected.
+
+Let's conclude with some out of memory tests to ensure that this really works.
+
+Let's allocate some memory using jshell in a JVM that runs in a container that has been given 1 GB of memory; that is, it has a max heap size of 256 MB.
+
+First, try to allocate a byte array of 100 MB:
+[source,terminal]
+----
+echo 'new byte[100_000_000]' | docker run -i --rm -m=1024M openjdk:12.0.2 jshell -q
+
+The command will respond with $1 ==>, meaning that it worked fine!
+----
+
+Normally, jshell will print out the value resulting from the command, but 100 MB of bytes all set to zero is a bit too much printout, and so we get nothing.
+Now, let's try to allocate a byte array that is larger than the max heap size, for example, 500 MB:
+
+[source,terminal]
+----
+echo 'new byte[500_000_000]' | docker run -i --rm -m=1024M openjdk:12.0.2 jshell -q
+
+The JVM sees that it can't perform the action since it honors the container settings of max memory and responds immediately with Exception java.lang.OutOfMemoryError: Java heap space. Great!
+----
+
+What would happen in this case if we use a JVM that doesn't honor the container settings of max memory?
+
+
+== Problems with Docker and Java SE 9 (or older)
+First, try out limiting a Java SE 9 JVM to three CPU cores using openjdk:9-jdk image.
+
+Java 9 fails to obey the three-CPU limit:
+
+[source,teminal]
+----
+echo 'Runtime.getRuntime().availableProcessors()' | docker run --rm -i --cpus 3 openjdk:9-jdk jshell -q
+
+It responds with $1 ==> 12 on my machine, that is, it ignores the limitation of three CPU cores.
+
+----
+
+We will see the same result, that is, $1 ==> 12, if we try out the --cpu-shares option:
+
+[source,termninal]
+----
+echo 'Runtime.getRuntime().availableProcessors()' | docker run --rm -i --cpu-shares 2048 openjdk:9-jdk jshell -q
+
+Now, let's try to limit the memory to 1 GB:
+----
+
+[source,terminal]
+----
+docker run -it --rm -m=1024M openjdk:9-jdk java -XX:+PrintFlagsFinal -version | grep MaxHeapSize
+
+As expected, Java SE 9 does not honor the memory constraint that we set in Docker; that is, it reports a max heap size of 4,202,692,608 bytes = 4 GB – 4 * 1024^3 bytes. Here, Java 9 calculated the available memory when given the memory in the Docker host, not in the actual container!
+----
+
+So, what happens if we repeat the memory allocation tests that we did for Java SE 12?
+
+Let's try out the first test, that is, allocating a 100 MB array:
+
+[source,termninal]
+----
+echo 'new byte[100_000_000]' | docker run -i --rm -m=1024M openjdk:9-jdk jshell -q
+
+The command responds with $1 ==> byte[100000000] { 0, 0, 0, ..., so that worked fine!
+----
+
+Now, let's move on to the really interesting test: what if we allocate a byte array of 500 MB that doesn't fit in the memory that was allocated to the container by Docker?
+
+[source,terminal]
+----
+echo 'new byte[500_000_000]' | docker run -i --rm -m=1024M openjdk:9-jdk jshell -q
+
+From a Java perspective, this should work. Since Java thinks the total memory is 16 GB, it has set the max heap size to 4 GB, so it happily starts to allocate 500 MB for the byte array. But after a while, the total size of the JVM exceeds 1 GB and Docker will kill the container with no mercy, resulting in a confusing exception such as State engine terminated. We basically have no clue what went wrong, even though we can guess that we ran out of memory.
+----
+
+So, to summarize, if you plan to do any serious work with Docker and Java, ensure that you use Java SE 10 or later!
+
+To be fair to Java SE 9, it should be mentioned that Java SE 9 contains some initial support for cgroups. If you specify the Java options -XX:+UnlockExperimentalVMOptions and -XX:+UseCGroupMemoryLimitForHeap, it will honor parts of the cgroup constraints, but not all of them, and it should be noted that this is only experimental. Due to this, it should be avoided in production environments. Simply use Java SE 10 or later in Docker!
+
+== Building a Docker image
+
+adding spring profiles on application.yml:
+
+[source,yml]
+----
+---
+spring.profiles: docker
+
+server.port: 8080
+----
+
+adding Dockerfile
+[source,yml]
+----
+FROM openjdk:12.0.2
+
+EXPOSE 8080
+
+ADD ./build/libs/*.jar app.jar
+
+ENTRYPOINT ["java","-jar","/app.jar"]
+----
+
+build docker image
+[source,terminal]
+----
+./gradlew :microservices:product-service:build
+
+Since we only want to build product-service and the projects it depends on, api and util, we don't use the normal build command, which builds all the microservices, but a variant that tells Gradle to only build product-service: :microservices:product-service:build.
+We can find the fat-jar file in the Gradle build library, build/libs. For example, the ls -l microservices/product-service/build/libs command will report something like the following:
+
+Next, we will build the Docker image and name it product-service, as follows:
+
+cd microservices/product-service
+
+docker build -t product-service .
+----
+
+== Starting up Docker
+
+[source,terminal]
+----
+docker run --rm -p8080:8080 -e "SPRING_PROFILES_ACTIVE=docker" product-service
+
+
+1. docker run: The Docker run command will start the container and display log output in Terminal. Terminal will be locked as long as the container runs.
+
+2. We have seen the --rm option already; it will tell Docker to clean up the container once we stop the execution from Terminal using Ctrl + C.
+
+3.The -p8080:8080 option maps port 8080 in the container to port 8080 in the Docker host, which makes it possible to call it from the outside. In the case of Docker for macOS, which runs Docker in a local Linux virtual machine, the port will also be port-forwarded to macOS, which is made available on localhost. We can only have one container mapping to a specific port in the Docker host!
+
+4.With the -e option, we can specify environment variables for the container, which in this case is SPRING_PROFILES_ACTIVE=docker. The SPRING_PROFILES_ACTIVE environment variable is used to tell Spring what profile to use. In our case, we want Spring to use the docker profile.
+
+5. Finally, we have product-service, which is the name of the Docker image that Docker will use to start the container.
+----
+
+[source,terminal]
+----
+curl localhost:8080/product/3 -s | jq
+
+{
+  "productId": 3,
+  "name": "name-3",
+  "weight": 123,
+  "serviceAddress": "212e9da48c4b/172.17.0.2:8080"
+}
+
+serviceAdrress = dockerId/ipAssignedByDocker:8080
+----
+
+== Running the container detached
+[source,teminal]
+----
+docker run -d -p8080:8080 -e "SPRING_PROFILES_ACTIVE=docker" --name my-prd-srv product-service
+
+Okay, that was great, but what if we don't want to hang the Terminal windows from where we started the container?
+
+It's time to start the container as detached, that is, running the container without locking Terminal!
+
+We can do this by adding the -d option and at the same time giving it a name using the --name option. The --rm option is no longer required since we will stop and remove the container explicitly when we are done with it:
+
+Check docker logs
+
+docker logs my-prd-srv -f
+
+The -f option tells the command to follow the log output, that is, not end the command when all the current log output has been written to Terminal, but also wait for more output. If you expect a lot of old log messages that you don't want to see, you can also add the --tail 0 option so that you only see new log messages. Alternatively, you can use the --since option and use either an absolute timestamp or a relative time, for example, --since 5m, to see log messages that are at most five minutes old.
+
+Try this out with a new curl request. You should see that a new log message has been written to the log output in Terminal!
+----
+
+== Docker Compose
+[source,yml]
+----
+
+version: '2.1'
+
+services:
+  product:
+    build: microservices/product-service
+    mem_limit: 350m
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+
+  recommendation:
+    build: microservices/recommendation-service
+    mem_limit: 350m
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+
+  review:
+    build: microservices/review-service
+    mem_limit: 350m
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+
+  product-composite:
+    build: microservices/product-composite-service
+    mem_limit: 350m
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+
+----
+
+Build using docker-compose
+
+[source,terminal]
+----
+./gradlew build
+
+then for creating docker images
+
+docker-compose build
+
+
+to chech all images
+
+docker images | grep hands-on-microservice
+
+will display :
+
+REPOSITORY                                TAG                 IMAGE ID            CREATED             SIZE
+hands-on-microservice_product-composite   latest              59d5daea1836        10 seconds ago      492MB
+hands-on-microservice_review              latest              932dafb8336d        15 seconds ago      492MB
+hands-on-microservice_recommendation      latest              8621920f1e36        18 seconds ago      492MB
+hands-on-microservice_product             latest              63d0c369b7d9        21 seconds ago      492MB
+
+
+then start docker using docker compose
+
+docker-compose up -d
+
+check the log
+
+docker-compose logs -f
+
+The Docker Compose logs command also supports restricting the log output to a group of containers. Simply add the names of the containers you want to see the log output of after the logs command. For example, to only see log output from the product and review service,
+
+use docker-compose logs -f product review.
+
+----
+
+[NOTE]
+====
+Please note that the service can be accessed from outside is only the product-compisite service
+since at the docker compose file we only expose port to the out world from product-composite service
+
+====
+
+[source,linux]
+----
+curl localhost:8080/product-composite/3 -s | jq
+{
+  "productId": 3,
+  "name": "name-3",
+  "weight": 123,
+  "recommendations": [
+    {
+      "recommendationId": 1,
+      "author": "Author 1",
+      "rate": 1
+    },
+    {
+      "recommendationId": 2,
+      "author": "Author 2",
+      "rate": 2
+    },
+    {
+      "recommendationId": 3,
+      "author": "Author 3",
+      "rate": 3
+    }
+  ],
+  "reviews": [
+    {
+      "reviewId": 1,
+      "author": "Author 1",
+      "subject": "Subject 1"
+    },
+    {
+      "reviewId": 2,
+      "author": "Author 2",
+      "subject": "Subject 2"
+    },
+    {
+      "reviewId": 3,
+      "author": "Author 3",
+      "subject": "Subject 3"
+    }
+  ],
+  "serviceAddresses": {
+    "cmpositeServiceAddress": "f4840be3dc7a/172.19.0.3:8080",
+    "productServiceAddress": "e083d1d3672a/172.19.0.2:8080",
+    "reviewServiceAddress": "9a8791c7c8d1/172.19.0.4:8080",
+    "recomendationServiceAddress": "d250e1b12752/172.19.0.5:8080"
+  }
+}
+
+if you try the product will response 404 because we did not expose port for the others except product-composite
+
+curl localhost:8080/product/3 -s | jq
+{
+  "timestamp": "2020-03-20T09:12:10.421+0000",
+  "path": "/product/3",
+  "status": 404,
+  "error": "Not Found",
+  "message": null,
+  "requestId": "4df53df5-7"
+}
+
+to stop :
+
+docker-compose down
+----
+
+== Testing them all together automatically
+
+Docker Compose is really helpful when it comes to manually managing a group of microservices! In this section, we will take this one step further and integrate Docker Compose into our test script, test-em-all.bash. The test script will automatically start up the microservice landscape, run all the required tests to verify that the microservice landscape works as expected, and finally tear it down, leaving no traces behind.
+
+The test script can be found at $BOOK_HOME/Chapter04/test-em-all.bash.
+
+Before the test script runs the test suite, it will check for the presence of a start argument in the invocation of the test script. If found, it will restart the containers with the following code:
+
+[source,terminal]
+----
+if [[ $@ == *"start"* ]]
+then
+echo "Restarting the test environment..."
+echo "$ docker-compose down"
+docker-compose down
+echo "$ docker-compose up -d"
+docker-compose up -d
+fi
+----
+
+After that, the test script will wait for the product-composite service to respond with OK:
+
+[source,terminal]
+----
+waitForService http://$HOST:${PORT}/product-composite/1
+----
+
+The waitForService bash function can be implemented like so:
+
+[source,terminal]
+----
+function testUrl() {
+url=$@
+if curl $url -ks -f -o /dev/null
+then
+echo "Ok"
+return 0
+else
+echo -n "not yet"
+return 1
+fi;
+}
+
+function waitForService() {
+url=$@
+echo -n "Wait for: $url... "
+n=0
+until testUrl $url
+do
+n=$((n + 1))
+if [[ $n == 100 ]]
+then
+echo " Give up"
+exit 1
+else
+sleep 6
+echo -n ", retry #$n "
+fi
+done
+}
+
+----
+
+Next, all the tests are executed like they were previously. Afterward, they will tear down the landscape if it finds the stop argument in the invocation of the test scripts:
+
+[source,terminal]
+----
+if [[ $@ == *"stop"* ]]
+then
+echo "We are done, stopping the test environment..."
+echo "$ docker-compose down"
+docker-compose down
+fi
+
+----
+
+Note that the test script will not tear down the landscape if some tests fail; it will simply stop, leaving the landscape up for error analysis!
+The test script has also changed the default port from 7000, which we used when we ran the microservices without Docker, to 8080, which is used by our Docker containers.
+
+Let's try it out! To start the landscape, run the tests and tear it down afterward, like so:
+
+[source,terminal]
+----
+./test-em-all.bash start stop
+----
+
+The following is some sample output from a test run (with output from the specific tests that were deleted):
+
+
+
+After testing these, we can now move on to see how to troubleshoot tests that fail.
+
+
+== Troubleshooting a test run
+
+If the tests that were running ./test-em-all.bash start stop fail, following these steps can help you identify the problem and resume the tests once the problem has been fixed:
+
+First, check the status of the running microservices with the following command:
+
+[source,terminal]
+----
+docker-compose ps
+----
+
+If all the microservices are up and running and healthy, you will receive the following output:
+
+
+If any of the microservices do not have a status of Up, check its log output for any errors by using the docker-compose logs command. For example, you would use the following code if you wanted to check the log output for the product service:
+
+[source,terminal]
+----
+docker-compose logs product
+----
+
+If errors in the log output indicate that Docker is running out of disk space, parts of it can be reclaimed with the following command:
+
+[source,terminal]
+----
+docker system prune -f --volumes
+----
+
+If required, you can restart a failed microservice with the docker-compose up -d --scale command. For example, you would use the following code if you wanted to restart the product service:
+
+[source,terminal]
+----
+docker-compose up -d --scale product=0
+docker-compose up -d --scale product=1
+----
+
+If a microservice is missing, for example, due to a crash, you start it up with the docker-compose up -d --scale command. For example, you would use the following code for the product service:
+
+[source,terminal]
+----
+
+docker-compose up -d --scale product=1
+
+----
+
+Once all the microservices are up and running and healthy, run the test script again, but without starting the microservices:
+
+[source,terminal]
+----
+./test-em-all.bash
+----
+
+The tests should run fine!
+
+Finally, a tip about a combined command that builds runtime artifacts and Docker images from source and then runs all the tests in Docker:
+
+[source,terminal]
+----
+./gradlew clean build && docker-compose build && ./test-em-all.bash start stop
+----
+
+This is perfect if you want to check that everything works before you push new code to your Git repository or as part of a build pipeline in your build server!
