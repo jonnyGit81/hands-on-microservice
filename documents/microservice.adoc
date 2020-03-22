@@ -23,6 +23,8 @@
 
 == What do we build
 
+https://learning.oreilly.com/library/view/hands-on-microservices-with/9781789613476/2ace04dc-17c5-4429-894a-e98e3201dfd0.xhtml
+
 === Product service
 The product service manages product information and describes each product with the following attributes:
 
@@ -1120,3 +1122,323 @@ This is illustrated by the following diagram:
 First, let's learn how we can develop non-blocking synchronous REST APIs, and thereafter, we will look at how to develop event-driven asynchronous services.
 
 image:1.png[]
+
+== Dealing with blocking code
+
+In the case of the review service, which uses JPA to access its data in a relational database, we don't have support for a non-blocking programming model. Instead, we can run the blocking code using Scheduler, which is capable of running the blocking code on a thread from a dedicated thread pool with a limited number of threads. Using a thread pool for the blocking code avoids draining the available threads in the microservice (avoids affecting the non-blocking processing in the microservice).
+
+Let's see how this process works, as laid out in the following steps:
+
+see the Review microservices
+
+== Staring with Reactor and message broker implememted
+
+[source,linux]
+----
+
+./gradlew build && docker-compose build && docker-compose up -d
+
+
+body='{"productId":1,"name":"product name C","weight":300, "recommendations":[
+ {"recommendationId":1,"author":"author 1","rate":1,"content":"content 1"},
+ {"recommendationId":2,"author":"author 2","rate":2,"content":"content 2"},
+ {"recommendationId":3,"author":"author 3","rate":3,"content":"content 3"}
+], "reviews":[
+ {"reviewId":1,"author":"author 1","subject":"subject 1","content":"content 1"},
+ {"reviewId":2,"author":"author 2","subject":"subject 2","content":"content 2"},
+ {"reviewId":3,"author":"author 3","subject":"subject 3","content":"content 3"}
+]}'
+
+curl -X POST localhost:8080/product-composite -H "Content-Type: application/json" --data "$body"
+
+open rabbit mq
+
+http://localhost:15672/#/queues
+----
+
+== Guaranteed order and partitions
+We can use partitions to ensure that messages are delivered in the same order as they were sent but without losing performance and scalability.
+
+If the business logic requires that messages are consumed and processed in the same order as they were sent, we cannot use multiple instances per consumer to increase processing performance; for example, we cannot use consumer groups. This might, in some cases, lead to an unacceptable latency in the processing of incoming messages.
+
+In most cases, strict order in the processing of messages is only required for messages that affect the same business entities, for example, products.
+
+For example, messages affecting the product with product ID 1 can, in many cases, be processed independently of messages that affect the product with product ID 2. This means that the order only needs to be guaranteed for messages that have the same product ID.
+
+The solution to this is to make it possible to specify a key for each message that the messaging system can use in order to guarantee that the order is kept between messages with the same key. This can be solved by introducing sub-topics, also known as partitions, in a topic. The messaging system places messages in a specific partition based on its key. Messages with the same key are always placed in the same partition. The messaging system only needs to guarantee the delivery order for messages in one and the same partition. To ensure the order of the messages, we configure one consumer instance per partition within a consumer group. By increasing the number of partitions, we can allow a consumer to increase its number of instances. This increases its processing message performance without losing the delivery order. This is illustrated in the following  diagram:
+
+image:2.png[]
+In Spring Cloud Stream, this needs to be configured on both the publisher and consumer side. On the publisher side, the key and number of partitions must be specified. For example, for the product-composite service, we have the following:
+
+[source,yml]
+----
+spring.cloud.stream.bindings.output:
+  destination: products
+  producer:
+    partition-key-expression: payload.key
+    partition-count: 2
+----
+
+The preceding configuration means that the key will be taken from the payload in the message using a field named key and that two partitions will be used.
+
+Each consumer can specify which partition it wants to consume messages from. For example, for the product microservice, we have the following:
+
+[source,yml]
+----
+pring.cloud.stream.bindings.input:
+  destination: products
+  group:productsGroup
+  consumer:
+    partitioned: true
+    instance-index: 0
+----
+
+The preceding configuration tells Spring Cloud Stream that this consumer will only consume messages from partition number 0, that is, the first partition.
+
+
+== Saving events
+After running some tests on event-driven asynchronous services, it might be of interest to see what event was actually sent. When using Spring Cloud Stream with Kafka, events are retained in the topics, even after consumers have processed them. However, when using Spring Cloud Stream with RabbitMQ, the events are removed after they have been processed successfully.
+
+To be able to see what events have been published on each topic, Spring Cloud Stream is configured to save published events in a separate auditGroup consumer group per topic. For the products topic, the configuration looks like the following:
+
+[source,yml]
+----
+spring.cloud.stream:
+  bindings:
+    output-products:
+      destination: products
+      producer:
+        required-groups: auditGroup
+----
+
+When using RabbitMQ, this will result in extra queues being created where the events are stored for later inspection.
+
+For the full source code, see the src/main/resources/application.yml configuration file in the product-composite project.
+
+== Adding a health API
+
+https://learning.oreilly.com/library/view/hands-on-microservices-with/9781789613476/2ace04dc-17c5-4429-894a-e98e3201dfd0.xhtml
+
+
+== Using RabbitMQ without using partitions
+In this section, we will test the reactive microservices together with RabbitMQ but without using partitions.
+
+The default docker-compose.yml Docker Compose file is used in this configuration. The following changes have been applied to the file:
+
+RabbitMQ has been added, as shown here:
+
+[source,yml]
+----
+rabbitmq:
+image: rabbitmq:3.7.8-management
+mem_limit: 350m
+ports:
+- 5672:5672
+- 15672:15672
+healthcheck:
+test: ["CMD", "rabbitmqctl", "status"]
+interval: 10s
+timeout: 5s
+retries: 10
+The microservices now have a dependency declared to the RabbitMQ service. This means that Docker will not start the microservice containers until the RabbitMQ service is reported to be healthy:
+depends_on:
+rabbitmq:
+condition: service_healthy
+----
+
+To run our tests, perform the following steps:
+
+Build and start the system landscape with the following commands:
+
+[source,terminal]
+----
+./gradlew build && docker-compose build && docker-compose up -d
+----
+
+Now, we have to wait for the microservice landscape to be up and running.
+Try running the following command a few times:
+
+[source,terminal]
+----
+curl -s localhost:8080/actuator/health | jq -r .status
+----
+
+When it returns UP, we are ready to run our tests!
+
+First, create a composite product with the following commands:
+
+[source,linux]
+----
+body='{"productId":1,"name":"product name C","weight":300, "recommendations":[
+{"recommendationId":1,"author":"author 1","rate":1,"content":"content 1"},
+{"recommendationId":2,"author":"author 2","rate":2,"content":"content 2"},
+{"recommendationId":3,"author":"author 3","rate":3,"content":"content 3"}
+], "reviews":[
+{"reviewId":1,"author":"author 1","subject":"subject 1","content":"content 1"},
+{"reviewId":2,"author":"author 2","subject":"subject 2","content":"content 2"},
+{"reviewId":3,"author":"author 3","subject":"subject 3","content":"content 3"}
+]}'
+
+curl -X POST localhost:8080/product-composite -H "Content-Type: application/json" --data "$body"
+----
+
+
+When using Spring Cloud Stream together with RabbitMQ, it will create one RabbitMQ exchange per topic and a set of queues, depending on our configuration.
+
+Let's see what queues that Spring Cloud Stream has created for us!
+
+Open the following URL in a web browser: http://localhost:15672/#/queues. You should see the following queues:
+
+
+For each topic, we can see one queue for auditGroup, one for the consumer group that's used by the corresponding core microservice, and one dead-letter queue. We can also see that the auditGroup queues contain messages, as expected!
+
+Click on the products.auditGroup queue and scroll down to Get Message(s), expand it, and click on the button named Get Message(s) to see the message in the queue:
+
+
+Next, try to get the product composite using the following code:
+curl localhost:8080/product-composite/1 | jq
+Finally, delete it, like so:
+curl -X DELETE localhost:8080/product-composite/1
+Trying to get the deleted product again should result in a 404 - "NotFound" response!
+
+If you look in the RabbitMQ audit queues again, you should be able to find new messages containing delete events.
+
+Wrap up the test by bringing down the microservice landscape with the following command:
+docker-compose down
+This completes the tests where we use RabbitMQ without partitions. Now, let's move on and test RabbitMQ with partitions.
+
+== Using RabbitMQ with two partitions per topic
+Now, let's try out the partitioning support in Spring Cloud Stream!
+
+We have a separate Docker Compose file prepared for using RabbitMQ with two partitions per topic: docker-compose-partitions.yml. It will also start two instances per core microservice, one for each partition. For example, a second product instance is configured as follows:
+
+[source,yml]
+----
+product-p1:
+build: microservices/product-service
+mem_limit: 350m
+environment:
+- SPRING_PROFILES_ACTIVE=docker
+- SPRING_CLOUD_STREAM_BINDINGS_INPUT_CONSUMER_PARTITIONED=true
+- SPRING_CLOUD_STREAM_BINDINGS_INPUT_CONSUMER_INSTANCECOUNT=2
+- SPRING_CLOUD_STREAM_BINDINGS_INPUT_CONSUMER_INSTANCEINDEX=1
+depends_on:
+mongodb:
+condition: service_healthy
+rabbitmq:
+condition: service_healthy
+----
+
+Here is an explanation of the preceding source code:
+
+We use the same source code and Dockerfile that we did for the first product instance but configure them differently.
+Specifically, we assign the two product instances to different partitions using the instance-index property we described earlier in this chapter.
+When using system environment variables to specify Spring properties, we must use an uppercase format where dots are replaced with underscores.
+This product instance will only process asynchronous events; it will not respond to API calls. Since it has a different name, product-p1 (also used as its DNS name), it will not respond to calls to a URL starting with http://product:8080.
+Start up the microservice landscape with the following command:
+
+[source,linux]
+----
+export COMPOSE_FILE=docker-compose-partitions.yml
+docker-compose build && docker-compose up -d
+----
+
+Repeat the tests from the previous section but also create a product with the product ID set to 2. If you take a look into the queues set up by Spring Cloud Stream, you will see one queue per partition and that the product audit queues now contain one message each, that is, the event for product ID 1 was placed in one partition and the event for product ID 2 was placed in the other partition. If you go back to http://localhost:15672/#/queues in your web browser, you should see something like the following:
+
+
+To end the test with RabbitMQ using partitions, bring down the microservice landscape with the following command:
+
+docker-compose down
+unset COMPOSE_FILE
+We are now done with tests using RabbitMQ, both with and without partitions. The final test configuration we shall try out is testing the microservices together with Kafka.
+
+== Using Kafka with two partitions per topic
+
+Now, we shall try out a very cool feature of Spring Cloud Stream: changing the messaging system from RabbitMQ to Apache Kafka!
+
+This can be done simply by changing the value of the spring.cloud.stream.defaultBinder property from rabbit to kafka. This is handled by the docker-compose-kafka.yml Docker Compose file that has also replaced RabbitMQ with Kafka and Zookeeper. The configuration of Kafka and Zookeeper looks as follows:
+
+[source,yml]
+----
+kafka:
+  image: wurstmeister/kafka:2.12-2.1.0
+  mem_limit: 350m
+  ports:
+    - "9092:9092"
+  environment:
+    - KAFKA_ADVERTISED_HOST_NAME=kafka
+    - KAFKA_ADVERTISED_PORT=9092
+    - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+  depends_on:
+    - zookeeper
+
+zookeeper:
+  image: wurstmeister/zookeeper:3.4.6
+  mem_limit: 350m
+  ports:
+    - "2181:2181"
+  environment:
+    - KAFKA_ADVERTISED_HOST_NAME=zookeeper
+----
+
+Kafka is also configured to use two partitions per topic, and like before, we start up two instances per core microservice, one for each partition. See the Docker Compose file, docker-compose-kafka.yml, for details!
+
+Start up the microservice landscape with the following command:
+
+[source.terminal]
+----
+export COMPOSE_FILE=docker-compose-kafka.yml
+docker-compose build && docker-compose up -d
+----
+
+Repeat the tests from the previous section, for example, create two products, one with the product ID set to 1, and one with the product ID set to 2.
+
+Unfortunately, Kafka doesn't come with any graphical tools that can be used to inspect topics, partitions, and the messages that are placed within them. Instead, we can run CLI commands in the Kafka Docker container.
+To see a list of topics, run the following command:
+
+[source,terminal]
+----
+ocker-compose exec kafka /opt/kafka/bin/kafka-topics.sh --zookeeper zookeeper --list
+----
+
+Here is an explanation of the preceding source code:
+
+. The topics prefixed with error are the topics corresponding to dead-letter queues.
+. You will not find any auditGroup in the case of RabbitMQ; instead, all messages the are available in the topics for any consumer to process.
+
+To see the partitions in a specific topic, for example, the products topic, run the following command:
+
+[source,terminal]
+----
+
+docker-compose exec kafka /opt/kafka/bin/kafka-topics.sh --describe --zookeeper zookeeper --topic products
+
+----
+
+To see all the messages in a specific topic, for example, the products topic, run the following command:
+
+
+
+[source,terminal]
+----
+docker-compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic products --from-beginning --timeout-ms 1000
+----
+
+To see all the messages in a specific partition, for example, partition 1 in the products topic, run the following command:
+
+[source,terminal]
+----
+docker-compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic products --from-beginning --timeout-ms 1000 --partition 1
+----
+
+The output will end with a timeout exception since we stop the command by specifying a timeout for the command of 1000 ms.
+
+Bring down the microservice landscape with the following command:
+
+[source,terminal]
+----
+docker-compose down
+unset COMPOSE_FILE
+----
+
+Now, we have learned how Spring Cloud Stream can be used to switch a message broker from RabbitMQ to Kafka without requiring any changes in the source code. It just requires a few changes in the Docker Compose file.

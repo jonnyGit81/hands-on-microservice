@@ -5,14 +5,88 @@ spring.data.mongodb:
   port: 27017
   database: product-db
 
+#Consumer in product-service, received message from product-composite service.
+#Here are not remark but to see the producer config on product-composite service
+#spring.cloud.stream:
+#  defaultBinder: rabbit
+#  default.contentType: application/json
+#  bindings:
+#    output-products:
+#      destination: products #queName
+#      producer:
+#        required-groups: auditGroup
+
+#CONSUMER
+#perhatikan Class MessageProcessor di productService.
+#@EnableBinding(Sink.class) menyatakan sebagai consumer.
+#dalam Sink.class adalah functional interface
+#@Input(Sink.INPUT) di mana input = "input" adalah binding: input di xml. jika kita custom tanpa Sink.class maka cocokan dengan yang kita manual buat
+#SubscribableChannel input();
+#misal kita buat
+#public interface CustomSource {
+#  String INPUT = "apasajalah";
+
+#  @Input("apasajalah")
+#  MessageChannel apasajalah();
+# }
+#maka di yml ini kita harus tulis bindings: apasajalah, dengan @StreamListener("apasajalah") di method yang waktu mau consume message
+
+spring.cloud.stream:
+  defaultBinder: rabbit
+  default.contentType: application/json
+  bindings:
+    input:
+      destination: products #this is the queName. note Quename must same between producer and consumers.
+      group: productsGroup #find out what is this, ini seperti txn-log-cosunmer yang bisa banyak instance
+#---------------------
+
+
+# Retries and dead-letter queues, if at the consumer db failed will retry before put into dead letter queues
+#In the preceding example, we specify that Spring Cloud Stream shall perform 3 retries before placing a message on the dead-letter queue. The first retry shall be attempted after 500 ms and the two other attempts after 1000 ms.
+#Enabling the use of dead-letter queues is binding-specific; therefore, we have one configuration for RabbitMQ and one for Kafka.
+
+spring.cloud.stream.bindings.input.consumer:
+  maxAttempts: 3
+  backOffInitialInterval: 500
+  backOffMaxInterval: 1000
+  backOffMultiplier: 2.0
+
+spring.cloud.stream.rabbit.bindings.input.consumer:
+  autoBindDlq: true
+  republishToDlq: true
+
+spring.cloud.stream.kafka.bindings.input.consumer:
+  enableDlq: true
+
+management.endpoint.health.show-details: "ALWAYS"
+management.endpoints.web.exposure.include: "*"
+
+#---------------------
+
+spring.cloud.stream.kafka.binder:
+  brokers: 127.0.0.1
+  defaultBrokerPort: 9092
+
+spring.rabbitmq:
+  host: 127.0.0.1
+  port: 5672
+  username: guest
+  password: guest
+
 logging:
   level:
     root: INFO
     se.magnus: DEBUG
     org.springframework.data.mongodb.core.MongoTemplate: DEBUG
+
+
 ---
 spring.profiles: docker
 
+server.port: 8080
+
 spring.data.mongodb.host: mongodb
 
-server.port: 8080
+spring.rabbitmq.host: rabbitmq
+
+spring.cloud.stream.kafka.binder.brokers: kafka

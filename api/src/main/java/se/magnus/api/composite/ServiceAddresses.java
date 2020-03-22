@@ -1,38 +1,38 @@
 package se.magnus.api.composite;
 
 public class ServiceAddresses {
-    private final String cmpositeServiceAddress;
-    private final String productServiceAddress;
-    private final String reviewServiceAddress;
-    private final String recomendationServiceAddress;
+    private final String cmp;
+    private final String pro;
+    private final String rev;
+    private final String rec;
 
     public ServiceAddresses() {
-        this.cmpositeServiceAddress = null;
-        this.productServiceAddress = null;
-        this.reviewServiceAddress = null;
-        this.recomendationServiceAddress = null;
+        cmp = null;
+        pro = null;
+        rev = null;
+        rec = null;
     }
 
-    public ServiceAddresses(String cmpositeServiceAddress, String productServiceAddress, String reviewServiceAddress, String recomendationServiceAddress) {
-        this.cmpositeServiceAddress = cmpositeServiceAddress;
-        this.productServiceAddress = productServiceAddress;
-        this.reviewServiceAddress = reviewServiceAddress;
-        this.recomendationServiceAddress = recomendationServiceAddress;
+    public ServiceAddresses(String compositeAddress, String productAddress, String reviewAddress, String recommendationAddress) {
+        this.cmp = compositeAddress;
+        this.pro = productAddress;
+        this.rev = reviewAddress;
+        this.rec = recommendationAddress;
     }
 
-    public String getCmpositeServiceAddress() {
-        return cmpositeServiceAddress;
+    public String getCmp() {
+        return cmp;
     }
 
-    public String getProductServiceAddress() {
-        return productServiceAddress;
+    public String getPro() {
+        return pro;
     }
 
-    public String getReviewServiceAddress() {
-        return reviewServiceAddress;
+    public String getRev() {
+        return rev;
     }
 
-    public String getRecomendationServiceAddress() {
-        return recomendationServiceAddress;
+    public String getRec() {
+        return rec;
     }
 }

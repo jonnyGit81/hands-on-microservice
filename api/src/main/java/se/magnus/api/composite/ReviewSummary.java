@@ -1,16 +1,17 @@
 package se.magnus.api.composite;
 
 public class ReviewSummary {
+
     private final int reviewId;
     private final String author;
     private final String subject;
     private final String content;
 
     public ReviewSummary() {
-        reviewId = 0;
-        author = null;
-        subject = null;
-        content = null;
+        this.reviewId = 0;
+        this.author = null;
+        this.subject = null;
+        this.content = null;
     }
 
     public ReviewSummary(int reviewId, String author, String subject, String content) {

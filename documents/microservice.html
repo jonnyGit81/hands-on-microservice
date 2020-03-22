@@ -482,6 +482,12 @@ body.book #toc,body.book #preamble,body.book h1.sect0,body.book .sect1>h2{page-b
 <li><a href="#_database_connect_configuration">25. Database connect configuration</a></li>
 <li><a href="#_the_mongodb_and_mysql_cli_tools">26. The MongoDB and MySQL CLI tools</a></li>
 <li><a href="#_manual_tests_of_the_new_apis_and_the_persistence_layer">27. Manual tests of the new APIs and the persistence layer</a></li>
+<li><a href="#_choosing_between_non_blocking_synchronous_apis_and_event_driven_asynchronous_services">28. Choosing between non-blocking synchronous APIs and event-driven asynchronous services</a></li>
+<li><a href="#_dealing_with_blocking_code">29. Dealing with blocking code</a></li>
+<li><a href="#_staring_with_reactor_and_message_broker_implememted">30. Staring with Reactor and message broker implememted</a></li>
+<li><a href="#_using_rabbitmq_without_using_partitions">31. Using RabbitMQ without using partitions</a></li>
+<li><a href="#_using_rabbitmq_with_two_partitions_per_topic">32. Using RabbitMQ with two partitions per topic</a></li>
+<li><a href="#_using_kafka_with_two_partitions_per_topic">33. Using Kafka with two partitions per topic</a></li>
 </ul>
 </div>
 </div>
@@ -1793,12 +1799,388 @@ Enter exit to leave the mysql CLI.</p>
 </li>
 </ol>
 </div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1082">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">run application in docker
+
+./gradlew build &amp;&amp; docker-compose build &amp;&amp; docker-compose up -d
+
+query the mongodb
+
+docker-compose exec mongodb mongo product-db --quiet --eval &quot;db.products.find()&quot;
+
+docker-compose exec mongodb mongo recommendation-db --quiet --eval &quot;db.recommendations.find()&quot;
+
+query mysql
+
+docker-compose exec mysql mysql -uuser -p review-db -e &quot;select * from reviews&quot;</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1 has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1098">
+<h2 id="_choosing_between_non_blocking_synchronous_apis_and_event_driven_asynchronous_services">28. Choosing between non-blocking synchronous APIs and event-driven asynchronous services</h2>
+<div class="sectionbody">
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1099">
+<p>When developing reactive microservices, it is not always obvious when to use non-blocking synchronous APIs and when to use event-driven asynchronous services. In general, to make a microservice robust and scalable, it is important to make it as autonomous as possible, for example, minimizing its runtime dependencies. This is also known as loose coupling. Therefore, asynchronous message passing of events, is preferable over synchronous APIs. This is because the microservice will only depend on access to the messaging system at runtime instead of being dependent on synchronous access to a number of other microservices.</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1101">
+<p>There are, however, a number of cases where non-blocking synchronous APIs could be favorable to use, for example:</p>
+</div>
+<div class="olist arabic has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1103">
+<ol class="arabic">
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1103">
+<p>For read operations where an end user is waiting for a response</p>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1105">
+<p>Where the client platforms are more suitable for consuming synchronous APIs, for example, mobile apps or SPA web applications</p>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1107">
+<p>Where the clients will connect to the service from other organizations—where it might be hard to agree over a common messaging system to use across organizations</p>
+</li>
+</ol>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1109">
+<p>For the system landscape used in this book, we will use the following:</p>
+</div>
+<div class="olist arabic has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1111">
+<ol class="arabic">
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1111">
+<p>The create, read, and delete services exposed by the product composite microservice will be based on synchronous APIs. The composite microservice is assumed to have clients on both web and mobile platforms, as well as clients coming from other organizations rather than the ones that operate the system landscape. Therefore, synchronous APIs seem like a natural match.</p>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1112">
+<p>The read services provided by the core microservices will also be developed as non-blocking synchronous APIs since there is an end user waiting for their responses.</p>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1113">
+<p>The create and delete services provided by the core microservices will be developed as event-driven asynchronous services. The synchronous APIs provided by the composite microservices to create and delete aggregated product information will simply publish, create, and delete events on the topics that the core services listen on and then return with a 200 (OK) response.</p>
+</li>
+</ol>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1116">
+<p>This is illustrated by the following diagram:</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1120">
+<p>First, let&#8217;s learn how we can develop non-blocking synchronous REST APIs, and thereafter, we will look at how to develop event-driven asynchronous services.</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1122">
+<p><span class="image"><img src="images/1.png" alt="1"></span></p>
+</div>
+</div>
+</div>
+<div class="sect1 has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1124">
+<h2 id="_dealing_with_blocking_code">29. Dealing with blocking code</h2>
+<div class="sectionbody">
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1126">
+<p>In the case of the review service, which uses JPA to access its data in a relational database, we don&#8217;t have support for a non-blocking programming model. Instead, we can run the blocking code using Scheduler, which is capable of running the blocking code on a thread from a dedicated thread pool with a limited number of threads. Using a thread pool for the blocking code avoids draining the available threads in the microservice (avoids affecting the non-blocking processing in the microservice).</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1128">
+<p>Let&#8217;s see how this process works, as laid out in the following steps:</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1130">
+<p>see the Review microservices</p>
+</div>
+</div>
+</div>
+<div class="sect1 has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1132">
+<h2 id="_staring_with_reactor_and_message_broker_implememted">30. Staring with Reactor and message broker implememted</h2>
+<div class="sectionbody">
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1135">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="linux">./gradlew build &amp;&amp; docker-compose build &amp;&amp; docker-compose up -d
+
+
+body='{&quot;productId&quot;:1,&quot;name&quot;:&quot;product name C&quot;,&quot;weight&quot;:300, &quot;recommendations&quot;:[
+ {&quot;recommendationId&quot;:1,&quot;author&quot;:&quot;author 1&quot;,&quot;rate&quot;:1,&quot;content&quot;:&quot;content 1&quot;},
+ {&quot;recommendationId&quot;:2,&quot;author&quot;:&quot;author 2&quot;,&quot;rate&quot;:2,&quot;content&quot;:&quot;content 2&quot;},
+ {&quot;recommendationId&quot;:3,&quot;author&quot;:&quot;author 3&quot;,&quot;rate&quot;:3,&quot;content&quot;:&quot;content 3&quot;}
+], &quot;reviews&quot;:[
+ {&quot;reviewId&quot;:1,&quot;author&quot;:&quot;author 1&quot;,&quot;subject&quot;:&quot;subject 1&quot;,&quot;content&quot;:&quot;content 1&quot;},
+ {&quot;reviewId&quot;:2,&quot;author&quot;:&quot;author 2&quot;,&quot;subject&quot;:&quot;subject 2&quot;,&quot;content&quot;:&quot;content 2&quot;},
+ {&quot;reviewId&quot;:3,&quot;author&quot;:&quot;author 3&quot;,&quot;subject&quot;:&quot;subject 3&quot;,&quot;content&quot;:&quot;content 3&quot;}
+]}'
+
+curl -X POST localhost:8080/product-composite -H &quot;Content-Type: application/json&quot; --data &quot;$body&quot;
+
+open rabbit mq
+
+http://localhost:15672/#/queues</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1 has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1158">
+<h2 id="_using_rabbitmq_without_using_partitions">31. Using RabbitMQ without using partitions</h2>
+<div class="sectionbody">
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1159">
+<p>In this section, we will test the reactive microservices together with RabbitMQ but without using partitions.</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1161">
+<p>The default docker-compose.yml Docker Compose file is used in this configuration. The following changes have been applied to the file:</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1163">
+<p>RabbitMQ has been added, as shown here:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1166">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="yml"><span style="color:#606">rabbitmq</span>:
+<span style="color:#606">image</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">rabbitmq:3.7.8-management</span></span>
+<span style="color:#606">mem_limit</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">350m</span></span>
+<span style="color:#606">ports</span>:
+- <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">5672:5672</span></span>
+- <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">15672:15672</span></span>
+<span style="color:#606">healthcheck</span>:
+<span style="color:#606">test</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">[&quot;CMD&quot;, &quot;rabbitmqctl&quot;, &quot;status&quot;]</span></span>
+<span style="color:#606">interval</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">10s</span></span>
+<span style="color:#606">timeout</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">5s</span></span>
+<span style="color:#606">retries</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">10</span></span>
+<span style="color:#606">The microservices now have a dependency declared to the RabbitMQ service. This means that Docker will not start the microservice containers until the RabbitMQ service is reported to be healthy</span>:
+<span style="color:#606">depends_on</span>:
+<span style="color:#606">rabbitmq</span>:
+<span style="color:#606">condition</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">service_healthy</span></span></code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1184">
+<p>To run our tests, perform the following steps:</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1186">
+<p>Build and start the system landscape with the following commands:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1189">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">./gradlew build &amp;&amp; docker-compose build &amp;&amp; docker-compose up -d</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1193">
+<p>Now, we have to wait for the microservice landscape to be up and running.
+Try running the following command a few times:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1197">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">curl -s localhost:8080/actuator/health | jq -r .status</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1201">
+<p>When it returns UP, we are ready to run our tests!</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1203">
+<p>First, create a composite product with the following commands:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1206">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="linux">body='{&quot;productId&quot;:1,&quot;name&quot;:&quot;product name C&quot;,&quot;weight&quot;:300, &quot;recommendations&quot;:[
+{&quot;recommendationId&quot;:1,&quot;author&quot;:&quot;author 1&quot;,&quot;rate&quot;:1,&quot;content&quot;:&quot;content 1&quot;},
+{&quot;recommendationId&quot;:2,&quot;author&quot;:&quot;author 2&quot;,&quot;rate&quot;:2,&quot;content&quot;:&quot;content 2&quot;},
+{&quot;recommendationId&quot;:3,&quot;author&quot;:&quot;author 3&quot;,&quot;rate&quot;:3,&quot;content&quot;:&quot;content 3&quot;}
+], &quot;reviews&quot;:[
+{&quot;reviewId&quot;:1,&quot;author&quot;:&quot;author 1&quot;,&quot;subject&quot;:&quot;subject 1&quot;,&quot;content&quot;:&quot;content 1&quot;},
+{&quot;reviewId&quot;:2,&quot;author&quot;:&quot;author 2&quot;,&quot;subject&quot;:&quot;subject 2&quot;,&quot;content&quot;:&quot;content 2&quot;},
+{&quot;reviewId&quot;:3,&quot;author&quot;:&quot;author 3&quot;,&quot;subject&quot;:&quot;subject 3&quot;,&quot;content&quot;:&quot;content 3&quot;}
+]}'
+
+curl -X POST localhost:8080/product-composite -H &quot;Content-Type: application/json&quot; --data &quot;$body&quot;</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1221">
+<p>When using Spring Cloud Stream together with RabbitMQ, it will create one RabbitMQ exchange per topic and a set of queues, depending on our configuration.</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1223">
+<p>Let&#8217;s see what queues that Spring Cloud Stream has created for us!</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1225">
+<p>Open the following URL in a web browser: <a href="http://localhost:15672/#/queues" class="bare">http://localhost:15672/#/queues</a>. You should see the following queues:</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1228">
+<p>For each topic, we can see one queue for auditGroup, one for the consumer group that&#8217;s used by the corresponding core microservice, and one dead-letter queue. We can also see that the auditGroup queues contain messages, as expected!</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1230">
+<p>Click on the products.auditGroup queue and scroll down to Get Message(s), expand it, and click on the button named Get Message(s) to see the message in the queue:</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1233">
+<p>Next, try to get the product composite using the following code:
+curl localhost:8080/product-composite/1 | jq
+Finally, delete it, like so:
+curl -X DELETE localhost:8080/product-composite/1
+Trying to get the deleted product again should result in a 404 - "NotFound" response!</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1239">
+<p>If you look in the RabbitMQ audit queues again, you should be able to find new messages containing delete events.</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1241">
+<p>Wrap up the test by bringing down the microservice landscape with the following command:
+docker-compose down
+This completes the tests where we use RabbitMQ without partitions. Now, let&#8217;s move on and test RabbitMQ with partitions.</p>
+</div>
+</div>
+</div>
+<div class="sect1 has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1245">
+<h2 id="_using_rabbitmq_with_two_partitions_per_topic">32. Using RabbitMQ with two partitions per topic</h2>
+<div class="sectionbody">
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1246">
+<p>Now, let&#8217;s try out the partitioning support in Spring Cloud Stream!</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1248">
+<p>We have a separate Docker Compose file prepared for using RabbitMQ with two partitions per topic: docker-compose-partitions.yml. It will also start two instances per core microservice, one for each partition. For example, a second product instance is configured as follows:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1251">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="yml"><span style="color:#606">product-p1</span>:
+<span style="color:#606">build</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">microservices/product-service</span></span>
+<span style="color:#606">mem_limit</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">350m</span></span>
+<span style="color:#606">environment</span>:
+- <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">SPRING_PROFILES_ACTIVE=docker</span></span>
+- <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">SPRING_CLOUD_STREAM_BINDINGS_INPUT_CONSUMER_PARTITIONED=true</span></span>
+- <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">SPRING_CLOUD_STREAM_BINDINGS_INPUT_CONSUMER_INSTANCECOUNT=2</span></span>
+- <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">SPRING_CLOUD_STREAM_BINDINGS_INPUT_CONSUMER_INSTANCEINDEX=1</span></span>
+<span style="color:#606">depends_on</span>:
+<span style="color:#606">mongodb</span>:
+<span style="color:#606">condition</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">service_healthy</span></span>
+<span style="color:#606">rabbitmq</span>:
+<span style="color:#606">condition</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">service_healthy</span></span></code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1267">
+<p>Here is an explanation of the preceding source code:</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1269">
+<p>We use the same source code and Dockerfile that we did for the first product instance but configure them differently.
+Specifically, we assign the two product instances to different partitions using the instance-index property we described earlier in this chapter.
+When using system environment variables to specify Spring properties, we must use an uppercase format where dots are replaced with underscores.
+This product instance will only process asynchronous events; it will not respond to API calls. Since it has a different name, product-p1 (also used as its DNS name), it will not respond to calls to a URL starting with <a href="http://product:8080" class="bare">http://product:8080</a>.
+Start up the microservice landscape with the following command:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1276">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="linux">export COMPOSE_FILE=docker-compose-partitions.yml
+docker-compose build &amp;&amp; docker-compose up -d</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1281">
+<p>Repeat the tests from the previous section but also create a product with the product ID set to 2. If you take a look into the queues set up by Spring Cloud Stream, you will see one queue per partition and that the product audit queues now contain one message each, that is, the event for product ID 1 was placed in one partition and the event for product ID 2 was placed in the other partition. If you go back to <a href="http://localhost:15672/#/queues" class="bare">http://localhost:15672/#/queues</a> in your web browser, you should see something like the following:</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1284">
+<p>To end the test with RabbitMQ using partitions, bring down the microservice landscape with the following command:</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1286">
+<p>docker-compose down
+unset COMPOSE_FILE
+We are now done with tests using RabbitMQ, both with and without partitions. The final test configuration we shall try out is testing the microservices together with Kafka.</p>
+</div>
+</div>
+</div>
+<div class="sect1 has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1290">
+<h2 id="_using_kafka_with_two_partitions_per_topic">33. Using Kafka with two partitions per topic</h2>
+<div class="sectionbody">
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1292">
+<p>Now, we shall try out a very cool feature of Spring Cloud Stream: changing the messaging system from RabbitMQ to Apache Kafka!</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1294">
+<p>This can be done simply by changing the value of the spring.cloud.stream.defaultBinder property from rabbit to kafka. This is handled by the docker-compose-kafka.yml Docker Compose file that has also replaced RabbitMQ with Kafka and Zookeeper. The configuration of Kafka and Zookeeper looks as follows:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1297">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="yml"><span style="color:#606">kafka</span>:
+  <span style="color:#606">image</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">wurstmeister/kafka:2.12-2.1.0</span></span>
+  <span style="color:#606">mem_limit</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">350m</span></span>
+  <span style="color:#606">ports</span>:
+    - <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#710">&quot;</span><span style="color:#D20">9092:9092</span><span style="color:#710">&quot;</span></span>
+  <span style="color:#606">environment</span>:
+    - <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">KAFKA_ADVERTISED_HOST_NAME=kafka</span></span>
+    - <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">KAFKA_ADVERTISED_PORT=9092</span></span>
+    - <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181</span></span>
+  <span style="color:#606">depends_on</span>:
+    - <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">zookeeper</span></span>
+
+<span style="color:#606">zookeeper</span>:
+  <span style="color:#606">image</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">wurstmeister/zookeeper:3.4.6</span></span>
+  <span style="color:#606">mem_limit</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">350m</span></span>
+  <span style="color:#606">ports</span>:
+    - <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#710">&quot;</span><span style="color:#D20">2181:2181</span><span style="color:#710">&quot;</span></span>
+  <span style="color:#606">environment</span>:
+    - <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">KAFKA_ADVERTISED_HOST_NAME=zookeeper</span></span></code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1319">
+<p>Kafka is also configured to use two partitions per topic, and like before, we start up two instances per core microservice, one for each partition. See the Docker Compose file, docker-compose-kafka.yml, for details!</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1321">
+<p>Start up the microservice landscape with the following command:</p>
+</div>
+<div class="listingblock terminal has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1324">
+<div class="content">
+<pre class="CodeRay highlight"><code>export COMPOSE_FILE=docker-compose-kafka.yml
+docker-compose build &amp;&amp; docker-compose up -d</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1329">
+<p>Repeat the tests from the previous section, for example, create two products, one with the product ID set to 1, and one with the product ID set to 2.</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1331">
+<p>Unfortunately, Kafka doesn&#8217;t come with any graphical tools that can be used to inspect topics, partitions, and the messages that are placed within them. Instead, we can run CLI commands in the Kafka Docker container.
+To see a list of topics, run the following command:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1335">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">ocker-compose exec kafka /opt/kafka/bin/kafka-topics.sh --zookeeper zookeeper --list</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1339">
+<p>Here is an explanation of the preceding source code:</p>
+</div>
+<div class="olist arabic has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1341">
+<ol class="arabic">
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1341">
+<p>The topics prefixed with error are the topics corresponding to dead-letter queues.</p>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1342">
+<p>You will not find any auditGroup in the case of RabbitMQ; instead, all messages the are available in the topics for any consumer to process.</p>
+</li>
+</ol>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1344">
+<p>To see the partitions in a specific topic, for example, the products topic, run the following command:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1347">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">docker-compose exec kafka /opt/kafka/bin/kafka-topics.sh --describe --zookeeper zookeeper --topic products</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1353">
+<p>To see all the messages in a specific topic, for example, the products topic, run the following command:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1358">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">docker-compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic products --from-beginning --timeout-ms 1000</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1362">
+<p>To see all the messages in a specific partition, for example, partition 1 in the products topic, run the following command:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1365">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">docker-compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic products --from-beginning --timeout-ms 1000 --partition 1</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1369">
+<p>The output will end with a timeout exception since we stop the command by specifying a timeout for the command of 1000 ms.</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1371">
+<p>Bring down the microservice landscape with the following command:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1374">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">docker-compose down
+unset COMPOSE_FILE</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1379">
+<p>Now, we have learned how Spring Cloud Stream can be used to switch a message broker from RabbitMQ to Kafka without requiring any changes in the source code. It just requires a few changes in the Docker Compose file.</p>
+</div>
 </div>
 </div>
 </div>
 <div id="footer">
 <div id="footer-text">
- 2020-03-22 00:23:42 +0700
+ 2020-03-22 21:43:37 +0700
 </div>
 </div>
 </body>

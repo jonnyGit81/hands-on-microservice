@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Mono;
 import se.magnus.api.core.product.Product;
 import se.magnus.api.core.product.ProductService;
 import se.magnus.microservices.core.product.persistent.ProductEntity;
@@ -13,66 +14,60 @@ import se.magnus.util.exceptions.InvalidInputException;
 import se.magnus.util.exceptions.NotFoundException;
 import se.magnus.util.http.ServiceUtil;
 
+import static reactor.core.publisher.Mono.error;
+
 @RestController
 public class ProductServiceImpl implements ProductService {
+
     private static final Logger LOG = LoggerFactory.getLogger(ProductServiceImpl.class);
 
     private final ServiceUtil serviceUtil;
-    private final ProductRepository productRepository;
-    private final ProductMapper productMapper;
+
+    private final ProductRepository repository;
+
+    private final ProductMapper mapper;
 
     @Autowired
-    public ProductServiceImpl(ServiceUtil serviceUtil, ProductRepository productRepository, ProductMapper productMapper) {
+    public ProductServiceImpl(ProductRepository repository, ProductMapper mapper, ServiceUtil serviceUtil) {
+        this.repository = repository;
+        this.mapper = mapper;
         this.serviceUtil = serviceUtil;
-        this.productRepository = productRepository;
-        this.productMapper = productMapper;
-    }
-
-    @Override
-    public Product getProduct(int productId) {
-
-        if (productId < 1) {
-            throw new InvalidInputException("Invalid productId: " + productId);
-        }
-
-        ProductEntity productEntity = productRepository.findByProductId(productId)
-                .orElseThrow(() -> new NotFoundException("No product found for productId: " + productId));
-
-        /*if (productId == 13) {
-            throw new NotFoundException("No product found for productId: " + productId);
-        }*/
-
-        LOG.debug("/product return the found product for productId={}", productId);
-        Product response = productMapper.entityToApi(productEntity);
-        response.setServiceAddress(serviceUtil.getServiceAddress());
-        LOG.debug("/product return the found product for productId={}", response.toString());
-
-        return response;
-
     }
 
     @Override
     public Product createProduct(Product body) {
-        ProductEntity productEntity = productMapper.apiToEntity(body);
 
-        try {
+        if (body.getProductId() < 1) throw new InvalidInputException("Invalid productId: " + body.getProductId());
 
-            productRepository.save(productEntity);
-            LOG.debug("createProduct: entity created for productId: {}", body.getProductId());
+        ProductEntity entity = mapper.apiToEntity(body);
+        Mono<Product> newEntity = repository.save(entity)
+            .log()
+            .onErrorMap(
+                DuplicateKeyException.class,
+                ex -> new InvalidInputException("Duplicate key, Product Id: " + body.getProductId()))
+            .map(e -> mapper.entityToApi(e));
 
-        } catch (DuplicateKeyException dke) {
-            throw new InvalidInputException("Duplicate Key, productId " + body.getProductId());
-        }
+        return newEntity.block();
+    }
 
-        return productMapper.entityToApi(productEntity);
+    @Override
+    public Mono<Product> getProduct(int productId) {
+
+        if (productId < 1) throw new InvalidInputException("Invalid productId: " + productId);
+
+        return repository.findByProductId(productId)
+            .switchIfEmpty(error(new NotFoundException("No product found for productId: " + productId)))
+            .log()
+            .map(e -> mapper.entityToApi(e))
+            .map(e -> {e.setServiceAddress(serviceUtil.getServiceAddress()); return e;});
     }
 
     @Override
     public void deleteProduct(int productId) {
 
+        if (productId < 1) throw new InvalidInputException("Invalid productId: " + productId);
+
         LOG.debug("deleteProduct: tries to delete an entity with productId: {}", productId);
-        productRepository.findByProductId(productId).ifPresent(productEntity -> productRepository.delete(productEntity));
-
+        repository.findByProductId(productId).log().map(e -> repository.delete(e)).flatMap(e -> e).block();
     }
-
 }

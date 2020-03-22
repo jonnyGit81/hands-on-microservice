@@ -19,8 +19,14 @@ public class ProductAggregate {
         serviceAddresses = null;
     }
 
-    public ProductAggregate(int productId, String name, int weight, List<RecommendationSummary> recommendations,
-                            List<ReviewSummary> reviews, ServiceAddresses serviceAddresses) {
+    public ProductAggregate(
+        int productId,
+        String name,
+        int weight,
+        List<RecommendationSummary> recommendations,
+        List<ReviewSummary> reviews,
+        ServiceAddresses serviceAddresses) {
+
         this.productId = productId;
         this.name = name;
         this.weight = weight;

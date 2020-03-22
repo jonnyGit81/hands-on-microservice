@@ -5,12 +5,9 @@ import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import static java.lang.String.format;
 
-
-/**
- * mongodb Entity
- */
-@Document(collection = "products")
+@Document(collection="products")
 public class ProductEntity {
 
     @Id
@@ -34,40 +31,45 @@ public class ProductEntity {
         this.weight = weight;
     }
 
-    public String getId() {
-        return id;
+    @Override
+    public String toString() {
+        return format("ProductEntity: %s", productId);
     }
 
-    public void setId(String id) {
-        this.id = id;
+    public String getId() {
+        return id;
     }
 
     public Integer getVersion() {
         return version;
     }
 
-    public void setVersion(Integer version) {
-        this.version = version;
-    }
-
     public int getProductId() {
         return productId;
-    }
-
-    public void setProductId(int productId) {
-        this.productId = productId;
     }
 
     public String getName() {
         return name;
     }
 
-    public void setName(String name) {
-        this.name = name;
-    }
-
     public int getWeight() {
         return weight;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public void setVersion(Integer version) {
+        this.version = version;
+    }
+
+    public void setProductId(int productId) {
+        this.productId = productId;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 
     public void setWeight(int weight) {

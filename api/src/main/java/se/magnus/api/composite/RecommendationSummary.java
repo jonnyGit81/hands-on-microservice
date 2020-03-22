@@ -1,16 +1,17 @@
 package se.magnus.api.composite;
 
 public class RecommendationSummary {
+
     private final int recommendationId;
     private final String author;
     private final int rate;
     private final String content;
 
     public RecommendationSummary() {
-        recommendationId = 0;
-        author = null;
-        rate = 0;
-        content = null;
+        this.recommendationId = 0;
+        this.author = null;
+        this.rate = 0;
+        this.content = null;
     }
 
     public RecommendationSummary(int recommendationId, String author, int rate, String content) {
@@ -34,5 +35,4 @@ public class RecommendationSummary {
 
     public String getContent() {
         return content;
-    }
-}
+    }}
