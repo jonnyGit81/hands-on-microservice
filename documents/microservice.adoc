@@ -1093,4 +1093,30 @@ docker-compose exec mongodb mongo recommendation-db --quiet --eval "db.recommend
 query mysql
 
 docker-compose exec mysql mysql -uuser -p review-db -e "select * from reviews"
----
+----
+
+== Choosing between non-blocking synchronous APIs and event-driven asynchronous services
+When developing reactive microservices, it is not always obvious when to use non-blocking synchronous APIs and when to use event-driven asynchronous services. In general, to make a microservice robust and scalable, it is important to make it as autonomous as possible, for example, minimizing its runtime dependencies. This is also known as loose coupling. Therefore, asynchronous message passing of events, is preferable over synchronous APIs. This is because the microservice will only depend on access to the messaging system at runtime instead of being dependent on synchronous access to a number of other microservices.
+
+There are, however, a number of cases where non-blocking synchronous APIs could be favorable to use, for example:
+
+. For read operations where an end user is waiting for a response
+
+. Where the client platforms are more suitable for consuming synchronous APIs, for example, mobile apps or SPA web applications
+
+. Where the clients will connect to the service from other organizations—where it might be hard to agree over a common messaging system to use across organizations
+
+For the system landscape used in this book, we will use the following:
+
+. The create, read, and delete services exposed by the product composite microservice will be based on synchronous APIs. The composite microservice is assumed to have clients on both web and mobile platforms, as well as clients coming from other organizations rather than the ones that operate the system landscape. Therefore, synchronous APIs seem like a natural match.
+. The read services provided by the core microservices will also be developed as non-blocking synchronous APIs since there is an end user waiting for their responses.
+. The create and delete services provided by the core microservices will be developed as event-driven asynchronous services. The synchronous APIs provided by the composite microservices to create and delete aggregated product information will simply publish, create, and delete events on the topics that the core services listen on and then return with a 200 (OK) response.
+
+
+This is illustrated by the following diagram:
+
+
+
+First, let's learn how we can develop non-blocking synchronous REST APIs, and thereafter, we will look at how to develop event-driven asynchronous services.
+
+image:1.png[]
