@@ -1354,6 +1354,9 @@ We are now done with tests using RabbitMQ, both with and without partitions. The
 
 == Using Kafka with two partitions per topic
 
+https://learning.oreilly.com/library/view/hands-on-microservices-with/9781789613476/87ebcc94-bbe5-44f6-a4aa-f4a3e7bf0d3d.xhtml
+
+
 Now, we shall try out a very cool feature of Spring Cloud Stream: changing the messaging system from RabbitMQ to Apache Kafka!
 
 This can be done simply by changing the value of the spring.cloud.stream.defaultBinder property from rabbit to kafka. This is handled by the docker-compose-kafka.yml Docker Compose file that has also replaced RabbitMQ with Kafka and Zookeeper. The configuration of Kafka and Zookeeper looks as follows:
@@ -1442,3 +1445,7 @@ unset COMPOSE_FILE
 ----
 
 Now, we have learned how Spring Cloud Stream can be used to switch a message broker from RabbitMQ to Kafka without requiring any changes in the source code. It just requires a few changes in the Docker Compose file.
+
+== Running automated tests of the reactive microservice landscape
+
+https://learning.oreilly.com/library/view/hands-on-microservices-with/9781789613476/62586a1e-c0e2-43f2-a8b8-ce2f029fad04.xhtml
