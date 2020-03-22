@@ -470,6 +470,18 @@ body.book #toc,body.book #preamble,body.book h1.sect0,body.book .sect1>h2{page-b
 <li><a href="#_problems_with_docker_and_java_se_9_or_older">13. Problems with Docker and Java SE 9 (or older)</a></li>
 <li><a href="#_building_a_docker_image">14. Building a Docker image</a></li>
 <li><a href="#_starting_up_docker">15. Starting up Docker</a></li>
+<li><a href="#_running_the_container_detached">16. Running the container detached</a></li>
+<li><a href="#_docker_compose">17. Docker Compose</a></li>
+<li><a href="#_testing_them_all_together_automatically">18. Testing them all together automatically</a></li>
+<li><a href="#_troubleshooting_a_test_run">19. Troubleshooting a test run</a></li>
+<li><a href="#_adding_configuration_and_general_api_documentation_to_product_composite_service_application">20. Adding configuration and general API documentation to Product Composite Service Application</a></li>
+<li><a href="#_to_list_docker_container_by_name">21. To list docker container by name</a></li>
+<li><a href="#_retrieve_mongodb_mysql">22. Retrieve MongoDB &amp; mysql</a></li>
+<li><a href="#_run_persistent_test_on_product_service">23. Run persistent test on product-service</a></li>
+<li><a href="#_the_docker_compose_configuration">24. The Docker Compose configuration</a></li>
+<li><a href="#_database_connect_configuration">25. Database connect configuration</a></li>
+<li><a href="#_the_mongodb_and_mysql_cli_tools">26. The MongoDB and MySQL CLI tools</a></li>
+<li><a href="#_manual_tests_of_the_new_apis_and_the_persistence_layer">27. Manual tests of the new APIs and the persistence layer</a></li>
 </ul>
 </div>
 </div>
@@ -1020,12 +1032,773 @@ docker build -t product-service .</code></pre>
 5. Finally, we have product-service, which is the name of the Docker image that Docker will use to start the container.</code></pre>
 </div>
 </div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-444">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">curl localhost:8080/product/3 -s | jq
+
+{
+  &quot;productId&quot;: 3,
+  &quot;name&quot;: &quot;name-3&quot;,
+  &quot;weight&quot;: 123,
+  &quot;serviceAddress&quot;: &quot;212e9da48c4b/172.17.0.2:8080&quot;
+}
+
+serviceAdrress = dockerId/ipAssignedByDocker:8080</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1 has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-457">
+<h2 id="_running_the_container_detached">16. Running the container detached</h2>
+<div class="sectionbody">
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-459">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="teminal">docker run -d -p8080:8080 -e &quot;SPRING_PROFILES_ACTIVE=docker&quot; --name my-prd-srv product-service
+
+Okay, that was great, but what if we don't want to hang the Terminal windows from where we started the container?
+
+It's time to start the container as detached, that is, running the container without locking Terminal!
+
+We can do this by adding the -d option and at the same time giving it a name using the --name option. The --rm option is no longer required since we will stop and remove the container explicitly when we are done with it:
+
+Check docker logs
+
+docker logs my-prd-srv -f
+
+The -f option tells the command to follow the log output, that is, not end the command when all the current log output has been written to Terminal, but also wait for more output. If you expect a lot of old log messages that you don't want to see, you can also add the --tail 0 option so that you only see new log messages. Alternatively, you can use the --since option and use either an absolute timestamp or a relative time, for example, --since 5m, to see log messages that are at most five minutes old.
+
+Try this out with a new curl request. You should see that a new log message has been written to the log output in Terminal!</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1 has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-477">
+<h2 id="_docker_compose">17. Docker Compose</h2>
+<div class="sectionbody">
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-479">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="yml"><span style="color:#606">version</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">'2.1'</span></span>
+
+<span style="color:#606">services</span>:
+  <span style="color:#606">product</span>:
+    <span style="color:#606">build</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">microservices/product-service</span></span>
+    <span style="color:#606">mem_limit</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">350m</span></span>
+    <span style="color:#606">environment</span>:
+      - <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">SPRING_PROFILES_ACTIVE=docker</span></span>
+
+  <span style="color:#606">recommendation</span>:
+    <span style="color:#606">build</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">microservices/recommendation-service</span></span>
+    <span style="color:#606">mem_limit</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">350m</span></span>
+    <span style="color:#606">environment</span>:
+      - <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">SPRING_PROFILES_ACTIVE=docker</span></span>
+
+  <span style="color:#606">review</span>:
+    <span style="color:#606">build</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">microservices/review-service</span></span>
+    <span style="color:#606">mem_limit</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">350m</span></span>
+    <span style="color:#606">environment</span>:
+      - <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">SPRING_PROFILES_ACTIVE=docker</span></span>
+
+  <span style="color:#606">product-composite</span>:
+    <span style="color:#606">build</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">microservices/product-composite-service</span></span>
+    <span style="color:#606">mem_limit</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">350m</span></span>
+    <span style="color:#606">ports</span>:
+      - <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#710">&quot;</span><span style="color:#D20">8080:8080</span><span style="color:#710">&quot;</span></span>
+    <span style="color:#606">environment</span>:
+      - <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">SPRING_PROFILES_ACTIVE=docker</span></span></code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-512">
+<p>Build using docker-compose</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-515">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">./gradlew build
+
+then for creating docker images
+
+docker-compose build
+
+
+to chech all images
+
+docker images | grep hands-on-microservice
+
+will display :
+
+REPOSITORY                                TAG                 IMAGE ID            CREATED             SIZE
+hands-on-microservice_product-composite   latest              59d5daea1836        10 seconds ago      492MB
+hands-on-microservice_review              latest              932dafb8336d        15 seconds ago      492MB
+hands-on-microservice_recommendation      latest              8621920f1e36        18 seconds ago      492MB
+hands-on-microservice_product             latest              63d0c369b7d9        21 seconds ago      492MB
+
+
+then start docker using docker compose
+
+docker-compose up -d
+
+check the log
+
+docker-compose logs -f
+
+The Docker Compose logs command also supports restricting the log output to a group of containers. Simply add the names of the containers you want to see the log output of after the logs command. For example, to only see log output from the product and review service,
+
+use docker-compose logs -f product review.</code></pre>
+</div>
+</div>
+<div class="admonitionblock note has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-551">
+<table>
+<tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-552">
+<p>Please note that the service can be accessed from outside is only the product-compisite service
+since at the docker compose file we only expose port to the out world from product-composite service</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-558">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="linux">curl localhost:8080/product-composite/3 -s | jq
+{
+  &quot;productId&quot;: 3,
+  &quot;name&quot;: &quot;name-3&quot;,
+  &quot;weight&quot;: 123,
+  &quot;recommendations&quot;: [
+    {
+      &quot;recommendationId&quot;: 1,
+      &quot;author&quot;: &quot;Author 1&quot;,
+      &quot;rate&quot;: 1
+    },
+    {
+      &quot;recommendationId&quot;: 2,
+      &quot;author&quot;: &quot;Author 2&quot;,
+      &quot;rate&quot;: 2
+    },
+    {
+      &quot;recommendationId&quot;: 3,
+      &quot;author&quot;: &quot;Author 3&quot;,
+      &quot;rate&quot;: 3
+    }
+  ],
+  &quot;reviews&quot;: [
+    {
+      &quot;reviewId&quot;: 1,
+      &quot;author&quot;: &quot;Author 1&quot;,
+      &quot;subject&quot;: &quot;Subject 1&quot;
+    },
+    {
+      &quot;reviewId&quot;: 2,
+      &quot;author&quot;: &quot;Author 2&quot;,
+      &quot;subject&quot;: &quot;Subject 2&quot;
+    },
+    {
+      &quot;reviewId&quot;: 3,
+      &quot;author&quot;: &quot;Author 3&quot;,
+      &quot;subject&quot;: &quot;Subject 3&quot;
+    }
+  ],
+  &quot;serviceAddresses&quot;: {
+    &quot;cmpositeServiceAddress&quot;: &quot;f4840be3dc7a/172.19.0.3:8080&quot;,
+    &quot;productServiceAddress&quot;: &quot;e083d1d3672a/172.19.0.2:8080&quot;,
+    &quot;reviewServiceAddress&quot;: &quot;9a8791c7c8d1/172.19.0.4:8080&quot;,
+    &quot;recomendationServiceAddress&quot;: &quot;d250e1b12752/172.19.0.5:8080&quot;
+  }
+}
+
+if you try the product will response 404 because we did not expose port for the others except product-composite
+
+curl localhost:8080/product/3 -s | jq
+{
+  &quot;timestamp&quot;: &quot;2020-03-20T09:12:10.421+0000&quot;,
+  &quot;path&quot;: &quot;/product/3&quot;,
+  &quot;status&quot;: 404,
+  &quot;error&quot;: &quot;Not Found&quot;,
+  &quot;message&quot;: null,
+  &quot;requestId&quot;: &quot;4df53df5-7&quot;
+}
+
+to stop :
+
+docker-compose down</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1 has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-623">
+<h2 id="_testing_them_all_together_automatically">18. Testing them all together automatically</h2>
+<div class="sectionbody">
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-625">
+<p>Docker Compose is really helpful when it comes to manually managing a group of microservices! In this section, we will take this one step further and integrate Docker Compose into our test script, test-em-all.bash. The test script will automatically start up the microservice landscape, run all the required tests to verify that the microservice landscape works as expected, and finally tear it down, leaving no traces behind.</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-627">
+<p>The test script can be found at $BOOK_HOME/Chapter04/test-em-all.bash.</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-629">
+<p>Before the test script runs the test suite, it will check for the presence of a start argument in the invocation of the test script. If found, it will restart the containers with the following code:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-632">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">if [[ $@ == *&quot;start&quot;* ]]
+then
+echo &quot;Restarting the test environment...&quot;
+echo &quot;$ docker-compose down&quot;
+docker-compose down
+echo &quot;$ docker-compose up -d&quot;
+docker-compose up -d
+fi</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-643">
+<p>After that, the test script will wait for the product-composite service to respond with OK:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-646">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">waitForService http://$HOST:${PORT}/product-composite/1</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-650">
+<p>The waitForService bash function can be implemented like so:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-653">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">function testUrl() {
+url=$@
+if curl $url -ks -f -o /dev/null
+then
+echo &quot;Ok&quot;
+return 0
+else
+echo -n &quot;not yet&quot;
+return 1
+fi;
+}
+
+function waitForService() {
+url=$@
+echo -n &quot;Wait for: $url... &quot;
+n=0
+until testUrl $url
+do
+n=$((n + 1))
+if [[ $n == 100 ]]
+then
+echo &quot; Give up&quot;
+exit 1
+else
+sleep 6
+echo -n &quot;, retry #$n &quot;
+fi
+done
+}</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-686">
+<p>Next, all the tests are executed like they were previously. Afterward, they will tear down the landscape if it finds the stop argument in the invocation of the test scripts:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-689">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">if [[ $@ == *&quot;stop&quot;* ]]
+then
+echo &quot;We are done, stopping the test environment...&quot;
+echo &quot;$ docker-compose down&quot;
+docker-compose down
+fi</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-699">
+<p>Note that the test script will not tear down the landscape if some tests fail; it will simply stop, leaving the landscape up for error analysis!
+The test script has also changed the default port from 7000, which we used when we ran the microservices without Docker, to 8080, which is used by our Docker containers.</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-702">
+<p>Let&#8217;s try it out! To start the landscape, run the tests and tear it down afterward, like so:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-705">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">./test-em-all.bash start stop</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-709">
+<p>The following is some sample output from a test run (with output from the specific tests that were deleted):</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-713">
+<p>After testing these, we can now move on to see how to troubleshoot tests that fail.</p>
+</div>
+</div>
+</div>
+<div class="sect1 has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-716">
+<h2 id="_troubleshooting_a_test_run">19. Troubleshooting a test run</h2>
+<div class="sectionbody">
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-718">
+<p>If the tests that were running ./test-em-all.bash start stop fail, following these steps can help you identify the problem and resume the tests once the problem has been fixed:</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-720">
+<p>First, check the status of the running microservices with the following command:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-723">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">docker-compose ps</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-727">
+<p>If all the microservices are up and running and healthy, you will receive the following output:</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-730">
+<p>If any of the microservices do not have a status of Up, check its log output for any errors by using the docker-compose logs command. For example, you would use the following code if you wanted to check the log output for the product service:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-733">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">docker-compose logs product</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-737">
+<p>If errors in the log output indicate that Docker is running out of disk space, parts of it can be reclaimed with the following command:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-740">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">docker system prune -f --volumes</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-744">
+<p>If required, you can restart a failed microservice with the docker-compose up -d --scale command. For example, you would use the following code if you wanted to restart the product service:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-747">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">docker-compose up -d --scale product=0
+docker-compose up -d --scale product=1</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-752">
+<p>If a microservice is missing, for example, due to a crash, you start it up with the docker-compose up -d --scale command. For example, you would use the following code for the product service:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-755">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">docker-compose up -d --scale product=1</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-761">
+<p>Once all the microservices are up and running and healthy, run the test script again, but without starting the microservices:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-764">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">./test-em-all.bash</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-768">
+<p>The tests should run fine!</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-770">
+<p>Finally, a tip about a combined command that builds runtime artifacts and Docker images from source and then runs all the tests in Docker:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-773">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">./gradlew clean build &amp;&amp; docker-compose build &amp;&amp; ./test-em-all.bash start stop</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-777">
+<p>This is perfect if you want to check that everything works before you push new code to your Git repository or as part of a build pipeline in your build server!</p>
+</div>
+</div>
+</div>
+<div class="sect1 has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-780">
+<h2 id="_adding_configuration_and_general_api_documentation_to_product_composite_service_application">20. Adding configuration and general API documentation to Product Composite Service Application</h2>
+<div class="sectionbody">
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-783">
+<p>To enable SpringFox in the product-composite-service microservice, we have to add a configuration. To keep the source code compact, we will add it directly to the ProductCompositeServiceApplication application class.</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-785">
+<p>If you prefer, you can place the configuration of SpringFox in a separate Spring configuration class.</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-788">
+<p>First, we need to add the @EnableSwagger2WebFlux annotation in order to get SpringFox to generate Swagger V2 documentation for our RESTful services, which is implemented using Spring WebFlux. Next, we need to define a Spring Bean that returns a SpringFox Docket bean, which is used to configure SpringFox.</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-790">
+<p>The source code that we will be adding to $BOOK_HOME/Chapter05/microservices/product-composite-service/src/main/java/se/magnus/microservices/composite/product/ProductCompositeServiceApplication.java looks as follows:</p>
+</div>
+<div class="listingblock java has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-793">
+<div class="content">
+<pre class="CodeRay highlight"><code>@EnableSwagger2WebFlux
+public class ProductCompositeServiceApplication {
+
+   @Bean
+   public Docket apiDocumentation() {
+      return new Docket(SWAGGER_2)
+         .select()
+         .apis(basePackage(&quot;se.magnus.microservices.composite.product&quot;))
+         .paths(PathSelectors.any())
+         .build()
+            .globalResponseMessage(GET, emptyList())
+            .apiInfo(new ApiInfo(
+                   apiTitle,
+                   apiDescription,
+                   apiVersion,
+                   apiTermsOfServiceUrl,
+                   new Contact(apiContactName, apiContactUrl,
+                    apiContactEmail),
+                   apiLicense,
+                   apiLicenseUrl,
+                   emptyList()
+                                  ));
+    }</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-819">
+<p>From the preceding code, we can understand the following:</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-821">
+<p>The @EnableSwagger2WebFlux annotation is the starting point for initiating SpringFox.
+The Docket bean is initiated to create Swagger V2 documentation.
+Using the apis() and paths() methods, we can specify where SpringFox shall look for API documentation.
+Using the globalResponseMessage() method, we ask SpringFox not to add any default HTTP response codes to the API documentation, such as 401 and 403, which we don&#8217;t currently use.
+The api* variables that are used to configure the Docket bean with general information about the API are initialized from the property file using Spring @Value annotations. These are as follows:</p>
+</div>
+<div class="listingblock java has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-828">
+<div class="content">
+<pre class="CodeRay highlight"><code>@Value(&quot;${api.common.version}&quot;)           String apiVersion;
+@Value(&quot;${api.common.title}&quot;)             String apiTitle;
+@Value(&quot;${api.common.description}&quot;)       String apiDescription;
+@Value(&quot;${api.common.termsOfServiceUrl}&quot;) String
+apiTermsOfServiceUrl;
+@Value(&quot;${api.common.license}&quot;)           String apiLicense;
+@Value(&quot;${api.common.licenseUrl}&quot;)        String apiLicenseUrl;
+@Value(&quot;${api.common.contact.name}&quot;)      String apiContactName;
+@Value(&quot;${api.common.contact.url}&quot;)       String apiContactUrl;
+@Value(&quot;${api.common.contact.email}&quot;)     String apiContactEmail;</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-841">
+<p>After adding a configuration and API documentation, we can now proceed to understand how to add an API specific documentation to ProductCompositeService.</p>
+</div>
+</div>
+</div>
+<div class="sect1 has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-843">
+<h2 id="_to_list_docker_container_by_name">21. To list docker container by name</h2>
+<div class="sectionbody">
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-845">
+<p>docker ps --format {{.Names}}</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-848">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="teminal">docker ps --format {{.Names}}
+
+hands-on-microservice_product-composite_1
+hands-on-microservice_product_1
+hands-on-microservice_recommendation_1
+hands-on-microservice_review_1</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1 has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-857">
+<h2 id="_retrieve_mongodb_mysql">22. Retrieve MongoDB &amp; mysql</h2>
+<div class="sectionbody">
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-860">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">We will be able to see data stored in MongoDB with a command like the following:
+
+docker-compose exec mongodb mongo product-db --quiet --eval &quot;db.products.find()&quot;
+
+docker-compose exec mysql mysql -uuser -p review-db -e &quot;select * from reviews&quot;</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1 has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-870">
+<h2 id="_run_persistent_test_on_product_service">23. Run persistent test on product-service</h2>
+<div class="sectionbody">
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-872">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">./gradlew microservices:product-service:test --tests PersistenceTests</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1 has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-876">
+<h2 id="_the_docker_compose_configuration">24. The Docker Compose configuration</h2>
+<div class="sectionbody">
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-878">
+<p>MongoDB and MySQL are declared as follows in the Docker Compose configuration file, docker-compose.yml:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-881">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="yml"><span style="color:#606">mongodb</span>:
+<span style="color:#606">image</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">mongo:3.6.9</span></span>
+<span style="color:#606">mem_limit</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">350m</span></span>
+<span style="color:#606">ports</span>:
+- <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#710">&quot;</span><span style="color:#D20">27017:27017</span><span style="color:#710">&quot;</span></span>
+<span style="color:#606">command</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">mongod --smallfiles</span></span>
+
+<span style="color:#606">mysql</span>:
+<span style="color:#606">image</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">mysql:5.7</span></span>
+<span style="color:#606">mem_limit</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">350m</span></span>
+<span style="color:#606">ports</span>:
+- <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#710">&quot;</span><span style="color:#D20">3306:3306</span><span style="color:#710">&quot;</span></span>
+<span style="color:#606">environment</span>:
+- <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">MYSQL_ROOT_PASSWORD=rootpwd</span></span>
+- <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">MYSQL_DATABASE=review-db</span></span>
+- <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">MYSQL_USER=user</span></span>
+- <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">MYSQL_PASSWORD=pwd</span></span>
+<span style="color:#606">healthcheck</span>:
+<span style="color:#606">test</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">[&quot;CMD&quot;, &quot;mysqladmin&quot; ,&quot;ping&quot;, &quot;-uuser&quot;, &quot;-ppwd&quot;, &quot;-h&quot;, &quot;localhost&quot;]</span></span>
+<span style="color:#606">interval</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">10s</span></span>
+<span style="color:#606">timeout</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">5s</span></span>
+<span style="color:#606">retries</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">10</span></span></code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-906">
+<p>The following is observed from the preceding code:</p>
+</div>
+<div class="olist arabic has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-908">
+<ol class="arabic">
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-908">
+<p>We will use the official Docker image for MongoDB V3.6.9 and MySQL 5.7 and forward their default ports 27017 and 3306 to the Docker host, also made available on localhost when using Docker for Mac.</p>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-910">
+<p>For MySQL, we also declare some environment variables, defining the following:</p>
+<div class="ulist has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-912">
+<ul>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-912">
+<p>The root password</p>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-913">
+<p>The name of the database that will be created on image startup</p>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-914">
+<p>A username and password for a user that is set up for the database on image startup</p>
+</li>
+</ul>
+</div>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-916">
+<p>For MySQL, we also declare a health check that Docker will run to determine the status of the MySQL database.
+To avoid problems with microservices that try to connect to their databases before the database is up and running,  the product and recommendation services are declared dependent on the mongodb database, as follows:</p>
+</li>
+</ol>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-920">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="yml"><span style="color:#606">recommendation</span>:
+    <span style="color:#606">depends_on</span>:
+        - <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">mongodb</span></span>
+
+<span style="color:#F00;background-color:#FAA">product</span>
+  <span style="color:#606">depends_on</span>:
+    - <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">mongodb</span></span></code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-931">
+<p>This means that Docker Compose will not start up the product and recommendation containers until the mongodb container is launched.</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-933">
+<p>For the same reason, the review service is declared dependent on the mysql database:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-936">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="yml"><span style="color:#606">review</span>:
+<span style="color:#606">depends_on</span>:
+<span style="color:#606">mysql</span>:
+<span style="color:#606">condition</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">service_healthy</span></span></code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-943">
+<p>In this case, the review service depends on the fact that the mysql container is not only launched, but also that the mysql containers health check reports are okay. The reason for this extra step is that the initialization of the mysql container includes setting up a database and creating a superuser for the database. This takes a few seconds and, to hold back the review service to startup before this is done, we direct Docker Compose to hold back the review container from being launched until the mysql container reports that it is operational through its health check.</p>
+</div>
+</div>
+</div>
+<div class="sect1 has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-945">
+<h2 id="_database_connect_configuration">25. Database connect configuration</h2>
+<div class="sectionbody">
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-947">
+<p>With the database in place, we now need to set up the configuration for the core microservices so they know how to connect to their databases. This is set up in each core microservice&#8217;s configuration file, src/main/resources/application.yml, in the product, recommendation, and review projects.</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-949">
+<p>The configuration for the product and recommendation services are similar, so we will only look into the configuration of the product services. The following part of the configuration is of interest:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-952">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="yml"><span style="color:#606">server.port</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">7002</span></span>
+
+<span style="color:#606">spring.data.mongodb</span>:
+  <span style="color:#606">host</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">localhost</span></span>
+  <span style="color:#606">port</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">27017</span></span>
+  <span style="color:#606">database</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">recommendation-db</span></span>
+
+<span style="color:#606">logging</span>:
+  <span style="color:#606">level</span>:
+    <span style="color:#606">root</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">INFO</span></span>
+    <span style="color:#606">se.magnus</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">DEBUG</span></span>
+    <span style="color:#606">org.springframework.data.mongodb.core.MongoTemplate</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">DEBUG</span></span>
+
+<span style="color:#f8f;background:#505"><span style="color:#f4f">---</span></span>
+<span style="color:#606">spring.profiles</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">docker</span></span>
+
+<span style="color:#606">spring.data.mongodb.host</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">mongodb</span></span>
+
+<span style="color:#606">server.port</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">8080</span></span></code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-975">
+<p>The following is observed from the preceding code:</p>
+</div>
+<div class="olist arabic has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-977">
+<ol class="arabic">
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-977">
+<p>When running without Docker using the default Spring profile, the database is expected to be reachable on localhost:27017.</p>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-979">
+<p>Setting the log level for MongoTemplate to DEBUG will allow us to see which MongoDB statements are executed in the log.</p>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-981">
+<p>When running inside Docker using the Spring profile, Docker, the database is expected to be reachable on mongodb:27017.</p>
+</li>
+</ol>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-983">
+<p>The configuration for the review service, which affects how it connects to its SQL database, looks like the following:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-986">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="yml"><span style="color:#606">server.port</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">7003</span></span>
+
+<span style="color:#777"># Strongly recommend to set this property to &quot;none&quot; in a production environment!</span>
+<span style="color:#606">spring.jpa.hibernate.ddl-auto</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">update</span></span>
+
+<span style="color:#606">spring.datasource</span>:
+  <span style="color:#606">url</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">jdbc:mysql://localhost/review-db</span></span>
+  <span style="color:#606">username</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">user</span></span>
+  <span style="color:#606">password</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">pwd</span></span>
+
+<span style="color:#606">spring.datasource.hikari.initializationFailTimeout</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">60000</span></span>
+
+<span style="color:#606">logging</span>:
+  <span style="color:#606">level</span>:
+    <span style="color:#606">root</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">INFO</span></span>
+    <span style="color:#606">se.magnus</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">DEBUG</span></span>
+    <span style="color:#606">org.hibernate.SQL</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">DEBUG</span></span>
+    <span style="color:#606">org.hibernate.type.descriptor.sql.BasicBinder</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">TRACE</span></span>
+
+<span style="color:#f8f;background:#505"><span style="color:#f4f">---</span></span>
+<span style="color:#606">spring.profiles</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">docker</span></span>
+
+<span style="color:#606">spring.datasource</span>:
+  <span style="color:#606">url</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">jdbc:mysql://mysql/review-db</span></span>
+
+<span style="color:#606">server.port</span>: <span style="background-color:hsla(0,100%,50%,0.05)"><span style="color:#D20">8080</span></span></code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1016">
+<p>The following is observed from the preceding code:</p>
+</div>
+<div class="olist arabic has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1018">
+<ol class="arabic">
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1018">
+<p>By default, Hibernate will be used by Spring Data JPA as the JPA Entity Manager.</p>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1020">
+<p>The spring.jpa.hibernate.ddl-auto property is used to tell Spring Data JPA to create new or update existing SQL tables during startup.
+Note: It is strongly recommended to set the spring.jpa.hibernate.ddl-auto property to none in a production environment—this prevents Spring Data JPA to manipulate the structure of the SQL tables.</p>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1023">
+<p>When running without Docker, using the default Spring profile, the database is expected to be reachable on localhost using the default port 3306.</p>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1025">
+<p>By default, HikariCP is used by Spring Data JPA as the JDBC connection pool. To minimize startup problems on computers with limited hardware resources, the initializationFailTimeout parameter is set to 60 seconds. This means that the Spring Boot application will wait for up to 60 seconds during startup to establish a database connection.</p>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1027">
+<p>The log level settings for Hibernate will cause Hibernate to print the SQL statements used and the actual values used. Please note that, when used in a production environment, writing the actual values to the log should be avoided for privacy reasons.</p>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1029">
+<p>When running inside Docker using the Spring profile, Docker, the database is expected to be reachable on the mysql hostname using the default port 3306.</p>
+</li>
+</ol>
+</div>
+</div>
+</div>
+<div class="sect1 has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1031">
+<h2 id="_the_mongodb_and_mysql_cli_tools">26. The MongoDB and MySQL CLI tools</h2>
+<div class="sectionbody">
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1033">
+<p>To be able to run the database CLI tools, the Docker Compose exec command can be used.</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1035">
+<p>The commands described in this section will be used when we get to the manual tests in the next section. Don&#8217;t try to run them now; they will fail since we have no databases up and running yet!</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1037">
+<p>To start the MongoDB CLI tool, mongo, inside the mongodb container, run the following command:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1040">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">docker-compose exec mongodb mongo --quiet
+&gt;
+
+Enter exit to leave the mongo CLI.</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1048">
+<p>Enter exit to leave the mongo CLI.</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1050">
+<p>To start the MySQL CLI tool, mysql, inside the mysql container and log in to review-db using the user created at startup, run the following command:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1053">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">docker-compose exec mysql mysql -uuser -p review-db
+ysql&gt;</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1058">
+<p>The mysql CLI tool will prompt you for a password; you can find it in the docker-compose.yml file. Look for the value of the environment variable, MYSQL_PASSWORD.
+Enter exit to leave the mysql CLI.</p>
+</div>
+</div>
+</div>
+<div class="sect1 has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1061">
+<h2 id="_manual_tests_of_the_new_apis_and_the_persistence_layer">27. Manual tests of the new APIs and the persistence layer</h2>
+<div class="sectionbody">
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1062">
+<p>Now, it is finally time to start everything up and test it manually using the Swagger UI.</p>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1064">
+<p>Build and start the system landscape with the following command:</p>
+</div>
+<div class="listingblock has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1067">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="terminal">at the root of hand-on-microservice
+
+./gradlew build &amp;&amp; docker-compose build &amp;&amp; docker-compose up</code></pre>
+</div>
+</div>
+<div class="paragraph has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1073">
+<p>Open the Swagger UI in a web browser, <a href="http://localhost:8080/swagger-ui.html" class="bare">http://localhost:8080/swagger-ui.html</a>, and perform the following steps on the web page:</p>
+</div>
+<div class="olist arabic has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1075">
+<ol class="arabic">
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1075">
+<p>Click on product-composite-service-impl and the POST method to expand them.</p>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1076">
+<p>Click on the Try it out button and go down to the body field.</p>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1077">
+<p>Replace the default value, 0,  of the productId field with 123456.</p>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1078">
+<p>Scroll down to the Execute button and click on it.</p>
+</li>
+<li class="has-source-line data-line-/Users/jonny/Code/hands-on-microservice/documents/microservice.adoc-1079">
+<p>Verify that the returned response code is 200.</p>
+</li>
+</ol>
+</div>
 </div>
 </div>
 </div>
 <div id="footer">
 <div id="footer-text">
- 2020-03-20 13:36:59 +0700
+ 2020-03-22 00:23:42 +0700
 </div>
 </div>
 </body>

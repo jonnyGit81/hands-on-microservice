@@ -1,0 +1,6 @@
+logging:
+  level:
+    root: INFO
+    se.magnus.microservices: DEBUG
+    org.springframework: OFF
+    org.junit.jupiter: INFO
